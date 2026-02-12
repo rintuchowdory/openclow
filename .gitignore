@@ -5,3 +5,5 @@ out/
 *.backup
 test-api.html
 setup-openclow-ai.sh
+.env.local
+.env*.local
