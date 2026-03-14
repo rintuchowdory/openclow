@@ -23,7 +23,8 @@ export default function OpenclowApp() {
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'chat' | 'tasks' | 'about'>('chat')
-  const [ollamaOnline, setOllamaOnline] = useState(false)
+  const [aiOnline, setAiOnline] = useState(false)
+  const [aiMode, setAiMode] = useState<'ollama' | 'gemini'>('ollama')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export default function OpenclowApp() {
     else {
       setMessages([{
         id: '1',
-        text: "👋 **Welcome to openclow ULTRA!**\n\nYour gorgeous AI assistant.\n\n✨ Features:\n• Glassmorphism design\n• Real-time AI chat\n• Task management\n• 100% FREE\n\nAsk me anything!",
+        text: "👋 **Welcome to openclow ULTRA!**\n\nYour AI assistant that works everywhere!\n\n✨ Features:\n• Works locally (Ollama) & cloud (Gemini)\n• Beautiful glassmorphism design\n• Task management\n• 100% functional\n\nAsk me anything!",
         sender: 'ai',
         timestamp: new Date()
       }])
@@ -41,8 +42,8 @@ export default function OpenclowApp() {
     const savedTasks = localStorage.getItem('openclow-tasks')
     if (savedTasks) setTasks(JSON.parse(savedTasks))
     
-    checkOllama()
-    const interval = setInterval(checkOllama, 30000)
+    checkAI()
+    const interval = setInterval(checkAI, 30000)
     return () => clearInterval(interval)
   }, [])
 
@@ -58,12 +59,24 @@ export default function OpenclowApp() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const checkOllama = async () => {
+  const checkAI = async () => {
+    // Try Ollama first (local)
     try {
-      const res = await fetch('http://localhost:11434/api/tags')
-      setOllamaOnline(res.ok)
-    } catch {
-      setOllamaOnline(false)
+      const res = await fetch('/api/ollama')
+      if (res.ok) {
+        setAiMode('ollama')
+        setAiOnline(true)
+        return
+      }
+    } catch {}
+
+    // Fallback to Gemini (cloud)
+    const geminiKey = process.env.NEXT_PUBLIC_GEMINI_KEY
+    if (geminiKey && geminiKey !== 'your_key_here') {
+      setAiMode('gemini')
+      setAiOnline(true)
+    } else {
+      setAiOnline(false)
     }
   }
 
@@ -83,39 +96,57 @@ export default function OpenclowApp() {
     setIsLoading(true)
 
     try {
-      const res = await fetch('http://localhost:11434/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'llama3.2',
-          prompt: `You are openclow, a helpful AI assistant. Be friendly and professional.\n\nUser: ${userInput}\n\nAssistant:`,
-          stream: false
+      let aiText = ''
+
+      if (aiMode === 'ollama') {
+        // Local Ollama
+        const res = await fetch('/api/ollama', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'llama3.2',
+            prompt: `You are openclow, a concise AI assistant. Give direct, practical answers. Be brief and helpful.\n\nUser: ${userInput}\n\nAssistant:`,
+            stream: false
+          })
         })
-      })
 
-      if (!res.ok) throw new Error('Ollama unavailable')
+        if (!res.ok) throw new Error('Ollama unavailable')
+        const data = await res.json()
+        aiText = data.response
 
-      const data = await res.json()
+      } else {
+        // Cloud Gemini
+        const geminiKey = process.env.NEXT_PUBLIC_GEMINI_KEY
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{ text: `You are openclow, a concise AI assistant. Give direct, practical answers. Be brief and helpful.\n\nUser: ${userInput}` }]
+            }]
+          })
+        })
+
+        if (!res.ok) throw new Error('Gemini unavailable')
+        const data = await res.json()
+        aiText = data.candidates[0].content.parts[0].text
+      }
       
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
-        text: data.response,
+        text: aiText,
         sender: 'ai',
         timestamp: new Date()
       }])
 
-      if (userInput.toLowerCase().includes('remind me') || userInput.toLowerCase().includes('add task')) {
-        const task = userInput.replace(/remind me to|add task|remind me/gi, '').trim()
-        if (task) addTask(task, 'personal', 'medium')
-      }
-    } catch (error) {
+    } catch (error: any) {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
-        text: "⚠️ Ollama offline. Restart: sudo systemctl restart ollama",
+        text: `⚠️ ${aiMode === 'ollama' ? 'Ollama' : 'Gemini'} Error: ${error.message}`,
         sender: 'ai',
         timestamp: new Date()
       }])
-      setOllamaOnline(false)
+      setAiOnline(false)
     } finally {
       setIsLoading(false)
     }
@@ -167,13 +198,13 @@ export default function OpenclowApp() {
               <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
                 openclow
               </h1>
-              <p className="text-xs text-slate-400 font-mono">ULTRA Edition</p>
+              <p className="text-xs text-slate-400 font-mono">DUAL MODE</p>
             </div>
           </div>
           <div className="flex items-center gap-2 mt-4 px-3 py-2 bg-slate-800/50 rounded-lg border border-slate-700/30">
-            <div className={`w-2 h-2 rounded-full ${ollamaOnline ? 'bg-green-400 shadow-lg shadow-green-400/50 animate-pulse' : 'bg-red-400'}`}></div>
+            <div className={`w-2 h-2 rounded-full ${aiOnline ? 'bg-green-400 shadow-lg shadow-green-400/50 animate-pulse' : 'bg-red-400'}`}></div>
             <span className="text-xs text-slate-300 font-medium">
-              {ollamaOnline ? 'Ollama Online' : 'Ollama Offline'}
+              {aiOnline ? (aiMode === 'ollama' ? '🏠 Local' : '☁️ Cloud') : 'Offline'}
             </span>
           </div>
         </div>
@@ -206,12 +237,12 @@ export default function OpenclowApp() {
               <span className="text-slate-300">{messages.length}</span>
             </div>
             <div className="flex justify-between">
-              <span>Tasks:</span>
-              <span className="text-slate-300">{tasks.length}</span>
+              <span>Mode:</span>
+              <span className="text-slate-300">{aiMode}</span>
             </div>
           </div>
           <button 
-            onClick={checkOllama}
+            onClick={checkAI}
             className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg text-sm text-white font-medium transition-all shadow-lg hover:shadow-xl"
           >
             🔄 Refresh
@@ -224,12 +255,12 @@ export default function OpenclowApp() {
           <h2 className="text-3xl font-bold text-white mb-1">
             {activeTab === 'chat' && '💬 Chat Assistant'}
             {activeTab === 'tasks' && '✅ Task Management'}
-            {activeTab === 'about' && 'ℹ️ About openclow'}
+            {activeTab === 'about' && 'ℹ️ About'}
           </h2>
           <p className="text-sm text-slate-400">
-            {activeTab === 'chat' && 'Powered by Ollama Llama 3.2'}
-            {activeTab === 'tasks' && `${tasks.filter(t => !t.completed).length} active tasks`}
-            {activeTab === 'about' && 'Professional AI Assistant'}
+            {activeTab === 'chat' && `Powered by ${aiMode === 'ollama' ? 'Ollama (Local)' : 'Gemini (Cloud)'}`}
+            {activeTab === 'tasks' && `${tasks.filter(t => !t.completed).length} active`}
+            {activeTab === 'about' && 'Dual-mode AI'}
           </p>
         </div>
 
@@ -244,8 +275,8 @@ export default function OpenclowApp() {
                       : 'bg-slate-800/60 backdrop-blur-xl text-slate-100 border border-slate-700/50'
                   }`}>
                     <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-                    <p className="text-xs opacity-60 mt-3 flex items-center gap-2">
-                      <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <p className="text-xs opacity-60 mt-3">
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
@@ -274,13 +305,13 @@ export default function OpenclowApp() {
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                  placeholder="Ask anything about coding, DevOps, Docker..."
-                  className="flex-1 bg-slate-800/60 border border-slate-700/50 rounded-xl px-6 py-4 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-lg"
+                  placeholder="Ask anything..."
+                  className="flex-1 bg-slate-800/60 border border-slate-700/50 rounded-xl px-6 py-4 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-lg"
                 />
                 <button
                   onClick={sendMessage}
-                  disabled={isLoading || !ollamaOnline}
-                  className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-600 disabled:to-gray-600 text-white font-medium rounded-xl transition-all shadow-lg hover:shadow-xl disabled:shadow-none hover:scale-105 active:scale-95"
+                  disabled={isLoading || !aiOnline}
+                  className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-600 disabled:to-gray-600 text-white font-medium rounded-xl transition-all shadow-lg hover:scale-105 active:scale-95"
                 >
                   {isLoading ? '...' : '🚀'}
                 </button>
@@ -293,9 +324,7 @@ export default function OpenclowApp() {
           <div className="flex-1 overflow-y-auto p-8">
             <div className="max-w-5xl mx-auto space-y-6">
               <div className="bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-xl">
-                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <span>➕</span> Add New Task
-                </h3>
+                <h3 className="text-lg font-semibold text-white mb-4">➕ Add Task</h3>
                 <input
                   type="text"
                   placeholder="What needs to be done?"
@@ -313,39 +342,27 @@ export default function OpenclowApp() {
                 <div className="text-center py-20">
                   <div className="text-7xl mb-4 animate-bounce">📋</div>
                   <p className="text-2xl text-slate-300 font-semibold">No tasks yet</p>
-                  <p className="text-sm text-slate-500 mt-2">Create your first task above</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {tasks.map(task => (
-                    <div
-                      key={task.id}
-                      className="group bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl p-5 hover:border-slate-600/50 transition-all shadow-lg hover:shadow-xl hover:scale-[1.01]"
-                    >
+                    <div key={task.id} className="group bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl p-5 hover:scale-[1.01] transition-all shadow-lg">
                       <div className="flex items-start gap-4">
                         <input
                           type="checkbox"
                           checked={task.completed}
                           onChange={() => toggleTask(task.id)}
-                          className="w-5 h-5 mt-1 rounded-lg border-2 border-slate-600 checked:bg-blue-600 checked:border-blue-600 transition-all cursor-pointer"
+                          className="w-5 h-5 mt-1 rounded cursor-pointer"
                         />
                         <div className="flex-1">
-                          <p className={`text-lg mb-2 ${task.completed ? 'line-through text-slate-500' : 'text-white font-medium'}`}>
+                          <p className={`text-lg mb-2 ${task.completed ? 'line-through text-slate-500' : 'text-white'}`}>
                             {task.text}
                           </p>
-                          <div className="flex gap-2">
-                            <span className={`text-xs px-3 py-1.5 rounded-lg bg-gradient-to-r ${getPriorityColor(task.priority)} text-white font-medium`}>
-                              {task.priority.toUpperCase()}
-                            </span>
-                            <span className="text-xs px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-300 border border-slate-600/30">
-                              {task.category}
-                            </span>
-                          </div>
+                          <span className={`text-xs px-3 py-1.5 rounded-lg bg-gradient-to-r ${getPriorityColor(task.priority)} text-white`}>
+                            {task.priority.toUpperCase()}
+                          </span>
                         </div>
-                        <button
-                          onClick={() => deleteTask(task.id)}
-                          className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-all hover:scale-110"
-                        >
+                        <button onClick={() => deleteTask(task.id)} className="opacity-0 group-hover:opacity-100 text-red-400">
                           🗑️
                         </button>
                       </div>
@@ -360,73 +377,11 @@ export default function OpenclowApp() {
         {activeTab === 'about' && (
           <div className="flex-1 overflow-y-auto p-8">
             <div className="max-w-4xl mx-auto space-y-6">
-              <div className="relative bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-8 shadow-2xl overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full filter blur-3xl"></div>
-                <div className="relative">
-                  <h3 className="text-3xl font-bold text-white mb-4 flex items-center gap-3">
-                    <span className="text-4xl">🤖</span> openclow ULTRA
-                  </h3>
-                  <p className="text-slate-300 leading-relaxed text-lg">
-                    A gorgeous AI-powered personal assistant with glassmorphism design, 
-                    local Ollama AI integration, and intelligent task management.
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-xl">
-                <h4 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                  <span>🛠️</span> Technology Stack
-                </h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-slate-700/30 px-4 py-3 rounded-lg border border-slate-600/30 hover:border-blue-500/50 transition-all">
-                    <div className="text-blue-400 font-semibold">Next.js 16</div>
-                    <div className="text-slate-400 text-sm">React Framework</div>
-                  </div>
-                  <div className="bg-slate-700/30 px-4 py-3 rounded-lg border border-slate-600/30 hover:border-blue-500/50 transition-all">
-                    <div className="text-blue-400 font-semibold">TypeScript</div>
-                    <div className="text-slate-400 text-sm">Type Safety</div>
-                  </div>
-                  <div className="bg-slate-700/30 px-4 py-3 rounded-lg border border-slate-600/30 hover:border-blue-500/50 transition-all">
-                    <div className="text-blue-400 font-semibold">Tailwind CSS</div>
-                    <div className="text-slate-400 text-sm">Styling</div>
-                  </div>
-                  <div className="bg-slate-700/30 px-4 py-3 rounded-lg border border-slate-600/30 hover:border-blue-500/50 transition-all">
-                    <div className="text-blue-400 font-semibold">Llama 3.2</div>
-                    <div className="text-slate-400 text-sm">AI Model</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-xl">
-                <h4 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                  <span>✨</span> Features
-                </h4>
-                <ul className="space-y-3 text-slate-300">
-                  <li className="flex items-start gap-3">
-                    <span className="text-green-400 text-xl flex-shrink-0">✓</span>
-                    <span>Beautiful glassmorphism UI with animated gradients</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-green-400 text-xl flex-shrink-0">✓</span>
-                    <span>Local AI inference - 100% private & free</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-green-400 text-xl flex-shrink-0">✓</span>
-                    <span>Intelligent task management with priorities</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-green-400 text-xl flex-shrink-0">✓</span>
-                    <span>Persistent data storage across sessions</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-green-400 text-xl flex-shrink-0">✓</span>
-                    <span>Responsive design for all devices</span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-green-400 text-xl flex-shrink-0">✓</span>
-                    <span>Real-time Ollama connection monitoring</span>
-                  </li>
-                </ul>
+              <div className="bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-8 shadow-2xl">
+                <h3 className="text-3xl font-bold text-white mb-4">🤖 openclow DUAL MODE</h3>
+                <p className="text-slate-300 text-lg">
+                  Works locally with Ollama AND in the cloud with Gemini. Best of both worlds!
+                </p>
               </div>
             </div>
           </div>
@@ -435,14 +390,8 @@ export default function OpenclowApp() {
 
       <style jsx global>{`
         @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
         .animate-fadeIn {
           animation: fadeIn 0.3s ease-out;
