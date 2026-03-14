@@ -117,7 +117,7 @@ export default function OpenclowApp() {
       } else {
         // Cloud Gemini
         const geminiKey = process.env.NEXT_PUBLIC_GEMINI_KEY
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
