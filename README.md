@@ -29,3 +29,4 @@ The workflow at `.github/workflows/ci.yml` installs dependencies, builds the sit
 For automatic production deployments consider connecting the repo to Vercel (recommended for Next.js) or keep using GitHub Pages for a static export.
 
 If you'd like, I can: add a custom domain config, wire up Vercel deployment files, or improve the site content.
+
