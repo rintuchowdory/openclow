@@ -24,7 +24,7 @@ export default function OpenclowApp() {
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'chat' | 'tasks' | 'about'>('chat')
   const [aiOnline, setAiOnline] = useState(false)
-  const [aiMode, setAiMode] = useState<'ollama' | 'gemini'>('ollama')
+  const [aiMode, setAiMode] = useState<'openai' | 'gemini'>('openai')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export default function OpenclowApp() {
     else {
       setMessages([{
         id: '1',
-        text: "👋 **Welcome to openclow ULTRA!**\n\nYour AI assistant that works everywhere!\n\n✨ Features:\n• Works locally (Ollama) & cloud (Gemini)\n• Beautiful glassmorphism design\n• Task management\n• 100% functional\n\nAsk me anything!",
+        text: "👋 **Welcome to openclow ULTRA!**\n\nYour AI assistant, powered by the cloud!\n\n✨ Features:\n• OpenAI & Gemini support\n• Beautiful glassmorphism design\n• Task management\n• 100% functional\n\nAsk me anything!",
         sender: 'ai',
         timestamp: new Date()
       }])
@@ -60,15 +60,13 @@ export default function OpenclowApp() {
   }, [messages])
 
   const checkAI = async () => {
-    // Try Ollama first (local)
-    try {
-      const res = await fetch('/api/ollama')
-      if (res.ok) {
-        setAiMode('ollama')
-        setAiOnline(true)
-        return
-      }
-    } catch {}
+    // Try OpenAI first (cloud)
+    const openaiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
+    if (openaiKey && openaiKey !== 'your_key_here') {
+      setAiMode('openai')
+      setAiOnline(true)
+      return
+    }
 
     // Fallback to Gemini (cloud)
     const geminiKey = process.env.NEXT_PUBLIC_GEMINI_KEY
@@ -98,19 +96,17 @@ export default function OpenclowApp() {
     try {
       let aiText = ''
 
-      if (aiMode === 'ollama') {
-        // Local Ollama
-        const res = await fetch('/api/ollama', {
+      if (aiMode === 'openai') {
+        // Cloud OpenAI
+        const res = await fetch('/api/openai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'llama3.2',
-            prompt: `You are openclow, a concise AI assistant. Give direct, practical answers. Be brief and helpful.\n\nUser: ${userInput}\n\nAssistant:`,
-            stream: false
+            prompt: `You are openclow, a concise AI assistant. Give direct, practical answers. Be brief and helpful.\n\nUser: ${userInput}\n\nAssistant:`
           })
         })
 
-        if (!res.ok) throw new Error('Ollama unavailable')
+        if (!res.ok) throw new Error('OpenAI unavailable')
         const data = await res.json()
         aiText = data.response
 
@@ -142,7 +138,7 @@ export default function OpenclowApp() {
     } catch (error: any) {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
-        text: `⚠️ ${aiMode === 'ollama' ? 'Ollama' : 'Gemini'} Error: ${error.message}`,
+        text: `⚠️ ${aiMode === 'openai' ? 'OpenAI' : 'Gemini'} Error: ${error.message}`,
         sender: 'ai',
         timestamp: new Date()
       }])
@@ -198,13 +194,13 @@ export default function OpenclowApp() {
               <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
                 openclow
               </h1>
-              <p className="text-xs text-slate-400 font-mono">DUAL MODE</p>
+              <p className="text-xs text-slate-400 font-mono">CLOUD MODE</p>
             </div>
           </div>
           <div className="flex items-center gap-2 mt-4 px-3 py-2 bg-slate-800/50 rounded-lg border border-slate-700/30">
             <div className={`w-2 h-2 rounded-full ${aiOnline ? 'bg-green-400 shadow-lg shadow-green-400/50 animate-pulse' : 'bg-red-400'}`}></div>
             <span className="text-xs text-slate-300 font-medium">
-              {aiOnline ? (aiMode === 'ollama' ? '🏠 Local' : '☁️ Cloud') : 'Offline'}
+              {aiOnline ? (aiMode === 'openai' ? '☁️ OpenAI' : '☁️ Gemini') : 'Offline'}
             </span>
           </div>
         </div>
@@ -258,9 +254,9 @@ export default function OpenclowApp() {
             {activeTab === 'about' && 'ℹ️ About'}
           </h2>
           <p className="text-sm text-slate-400">
-            {activeTab === 'chat' && `Powered by ${aiMode === 'ollama' ? 'Ollama (Local)' : 'Gemini (Cloud)'}`}
+            {activeTab === 'chat' && `Powered by ${aiMode === 'openai' ? 'OpenAI (Cloud)' : 'Gemini (Cloud)'}`}
             {activeTab === 'tasks' && `${tasks.filter(t => !t.completed).length} active`}
-            {activeTab === 'about' && 'Dual-mode AI'}
+            {activeTab === 'about' && 'Cloud AI'}
           </p>
         </div>
 
@@ -378,9 +374,9 @@ export default function OpenclowApp() {
           <div className="flex-1 overflow-y-auto p-8">
             <div className="max-w-4xl mx-auto space-y-6">
               <div className="bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-8 shadow-2xl">
-                <h3 className="text-3xl font-bold text-white mb-4">🤖 openclow DUAL MODE</h3>
+                <h3 className="text-3xl font-bold text-white mb-4">🤖 openclow CLOUD MODE</h3>
                 <p className="text-slate-300 text-lg">
-                  Works locally with Ollama AND in the cloud with Gemini. Best of both worlds!
+                  Powered by cloud AI — set NEXT_PUBLIC_OPENAI_API_KEY for OpenAI or NEXT_PUBLIC_GEMINI_KEY for Gemini.
                 </p>
               </div>
             </div>
