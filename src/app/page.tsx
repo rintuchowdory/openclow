@@ -24,7 +24,7 @@ export default function OpenclowApp() {
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'chat' | 'tasks' | 'about'>('chat')
   const [aiOnline, setAiOnline] = useState(false)
-  const [aiMode, setAiMode] = useState<'openai' | 'gemini'>('openai')
+  const [aiMode, setAiMode] = useState<'huggingface' | 'gemini' | 'openai'>('huggingface')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export default function OpenclowApp() {
     else {
       setMessages([{
         id: '1',
-        text: "👋 **Welcome to openclow ULTRA!**\n\nYour AI assistant, powered by the cloud!\n\n✨ Features:\n• OpenAI & Gemini support\n• Beautiful glassmorphism design\n• Task management\n• 100% functional\n\nAsk me anything!",
+        text: "👋 **Welcome to openclow ULTRA!**\n\nYour AI assistant, powered by HuggingFace — completely free, no credit card required!\n\n✨ Features:\n• HuggingFace free-tier AI (Zephyr-7B)\n• Gemini fallback support\n• Beautiful glassmorphism design\n• Task management\n• 100% functional\n\nAsk me anything!",
         sender: 'ai',
         timestamp: new Date()
       }])
@@ -60,10 +60,10 @@ export default function OpenclowApp() {
   }, [messages])
 
   const checkAI = async () => {
-    // Try OpenAI first (cloud)
-    const openaiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
-    if (openaiKey && openaiKey !== 'your_key_here') {
-      setAiMode('openai')
+    // Try HuggingFace first (free tier, no payment required)
+    const huggingfaceKey = process.env.NEXT_PUBLIC_HUGGINGFACE_API_KEY
+    if (huggingfaceKey && huggingfaceKey !== 'your_key_here') {
+      setAiMode('huggingface')
       setAiOnline(true)
       return
     }
@@ -96,21 +96,21 @@ export default function OpenclowApp() {
     try {
       let aiText = ''
 
-      if (aiMode === 'openai') {
-        // Cloud OpenAI
-        const res = await fetch('/api/openai', {
+      if (aiMode === 'huggingface') {
+        // HuggingFace Inference API (free tier)
+        const res = await fetch('/api/huggingface', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            prompt: `You are openclow, a concise AI assistant. Give direct, practical answers. Be brief and helpful.\n\nUser: ${userInput}\n\nAssistant:`
+            prompt: `<|system|>You are openclow, a concise AI assistant. Give direct, practical answers. Be brief and helpful.</s><|user|>${userInput}</s><|assistant|>`
           })
         })
 
-        if (!res.ok) throw new Error('OpenAI unavailable')
+        if (!res.ok) throw new Error('HuggingFace unavailable')
         const data = await res.json()
         aiText = data.response
 
-      } else {
+      } else if (aiMode === 'gemini') {
         // Cloud Gemini
         const geminiKey = process.env.NEXT_PUBLIC_GEMINI_KEY
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
@@ -126,6 +126,20 @@ export default function OpenclowApp() {
         if (!res.ok) throw new Error('Gemini unavailable')
         const data = await res.json()
         aiText = data.candidates[0].content.parts[0].text
+
+      } else {
+        // Cloud OpenAI (legacy fallback)
+        const res = await fetch('/api/openai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: `You are openclow, a concise AI assistant. Give direct, practical answers. Be brief and helpful.\n\nUser: ${userInput}\n\nAssistant:`
+          })
+        })
+
+        if (!res.ok) throw new Error('OpenAI unavailable')
+        const data = await res.json()
+        aiText = data.response
       }
       
       setMessages(prev => [...prev, {
@@ -138,7 +152,7 @@ export default function OpenclowApp() {
     } catch (error: any) {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
-        text: `⚠️ ${aiMode === 'openai' ? 'OpenAI' : 'Gemini'} Error: ${error.message}`,
+        text: `⚠️ ${aiMode === 'huggingface' ? 'HuggingFace' : aiMode === 'gemini' ? 'Gemini' : 'OpenAI'} Error: ${error.message}`,
         sender: 'ai',
         timestamp: new Date()
       }])
@@ -200,7 +214,7 @@ export default function OpenclowApp() {
           <div className="flex items-center gap-2 mt-4 px-3 py-2 bg-slate-800/50 rounded-lg border border-slate-700/30">
             <div className={`w-2 h-2 rounded-full ${aiOnline ? 'bg-green-400 shadow-lg shadow-green-400/50 animate-pulse' : 'bg-red-400'}`}></div>
             <span className="text-xs text-slate-300 font-medium">
-              {aiOnline ? (aiMode === 'openai' ? '☁️ OpenAI' : '☁️ Gemini') : 'Offline'}
+              {aiOnline ? (aiMode === 'huggingface' ? '🤗 HuggingFace' : aiMode === 'gemini' ? '☁️ Gemini' : '☁️ OpenAI') : 'Offline'}
             </span>
           </div>
         </div>
@@ -254,7 +268,7 @@ export default function OpenclowApp() {
             {activeTab === 'about' && 'ℹ️ About'}
           </h2>
           <p className="text-sm text-slate-400">
-            {activeTab === 'chat' && `Powered by ${aiMode === 'openai' ? 'OpenAI (Cloud)' : 'Gemini (Cloud)'}`}
+            {activeTab === 'chat' && `Powered by ${aiMode === 'huggingface' ? 'HuggingFace (Free)' : aiMode === 'gemini' ? 'Gemini (Cloud)' : 'OpenAI (Cloud)'}`}
             {activeTab === 'tasks' && `${tasks.filter(t => !t.completed).length} active`}
             {activeTab === 'about' && 'Cloud AI'}
           </p>
@@ -374,9 +388,9 @@ export default function OpenclowApp() {
           <div className="flex-1 overflow-y-auto p-8">
             <div className="max-w-4xl mx-auto space-y-6">
               <div className="bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-8 shadow-2xl">
-                <h3 className="text-3xl font-bold text-white mb-4">🤖 openclow CLOUD MODE</h3>
+                <h3 className="text-3xl font-bold text-white mb-4">🤗 openclow — Free AI Mode</h3>
                 <p className="text-slate-300 text-lg">
-                  Powered by cloud AI — set NEXT_PUBLIC_OPENAI_API_KEY for OpenAI or NEXT_PUBLIC_GEMINI_KEY for Gemini.
+                  Powered by HuggingFace's free inference API — no credit card, no cost. Set <code className="text-blue-300">NEXT_PUBLIC_HUGGINGFACE_API_KEY</code> (and <code className="text-blue-300">HUGGINGFACE_API_KEY</code> server-side) to get started. Gemini is available as a fallback via <code className="text-blue-300">NEXT_PUBLIC_GEMINI_KEY</code>.
                 </p>
               </div>
             </div>
