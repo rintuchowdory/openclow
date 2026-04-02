@@ -6,6 +6,4 @@ const nextConfig = {
   }
 }
 
-module.exports = {
-  allowedDevOrigins: ['local-origin.dev', '*.local-origin.dev'],
-}
+module.exports = nextConfig
