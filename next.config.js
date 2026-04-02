@@ -1,3 +1,3 @@
 const nextConfig = {
-  // Render unterstützt Server-side! ✅
 }
+module.exports = nextConfig
