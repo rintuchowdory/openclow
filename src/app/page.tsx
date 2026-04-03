@@ -15,6 +15,7 @@ interface Task {
   completed: boolean
   priority: 'low' | 'medium' | 'high'
   category: 'homework' | 'work' | 'devops' | 'personal'
+  dueDate?: string
 }
 
 export default function OpenclowApp() {
@@ -24,7 +25,11 @@ export default function OpenclowApp() {
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'chat' | 'tasks' | 'about'>('chat')
   const [aiOnline, setAiOnline] = useState(false)
-  const [aiMode, setAiMode] = useState<'huggingface' | 'gemini' | 'openai'>('huggingface')
+  const [aiMode, setAiMode] = useState<'huggingface' | 'gemini'>('huggingface')
+  const [newTask, setNewTask] = useState('')
+  const [newTaskPriority, setNewTaskPriority] = useState<Task['priority']>('medium')
+  const [newTaskCategory, setNewTaskCategory] = useState<Task['category']>('personal')
+  const [newTaskDue, setNewTaskDue] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -33,15 +38,15 @@ export default function OpenclowApp() {
     else {
       setMessages([{
         id: '1',
-        text: "👋 **Welcome to openclow ULTRA!**\n\nYour AI assistant, powered by HuggingFace — completely free, no credit card required!\n\n✨ Features:\n• HuggingFace free-tier AI (Zephyr-7B)\n• Gemini fallback support\n• Beautiful glassmorphism design\n• Task management\n• 100% functional\n\nAsk me anything!",
+        text: "👋 Welcome to openclow — Your Professional AI Assistant\n\nI'm powered by HuggingFace cloud AI — completely free!\n\n✨ I can help you with:\n• Software Development & Coding\n• DevOps & Cloud Architecture\n• Homework & Research\n• Task & Project Management\n\nHow may I assist you today?",
         sender: 'ai',
         timestamp: new Date()
       }])
     }
-    
+
     const savedTasks = localStorage.getItem('openclow-tasks')
     if (savedTasks) setTasks(JSON.parse(savedTasks))
-    
+
     checkAI()
     const interval = setInterval(checkAI, 30000)
     return () => clearInterval(interval)
@@ -60,21 +65,20 @@ export default function OpenclowApp() {
   }, [messages])
 
   const checkAI = async () => {
-    // Try HuggingFace first (free tier, no payment required)
-    const huggingfaceKey = process.env.NEXT_PUBLIC_HUGGINGFACE_API_KEY
-    if (huggingfaceKey && huggingfaceKey !== 'your_key_here') {
+    const hfKey = process.env.NEXT_PUBLIC_HUGGINGFACE_API_KEY
+    if (hfKey && hfKey !== 'your_key_here') {
       setAiMode('huggingface')
       setAiOnline(true)
       return
     }
-
-    // Fallback to Gemini (cloud)
     const geminiKey = process.env.NEXT_PUBLIC_GEMINI_KEY
     if (geminiKey && geminiKey !== 'your_key_here') {
       setAiMode('gemini')
       setAiOnline(true)
     } else {
-      setAiOnline(false)
+      // Try calling the API anyway — server-side key may be set
+      setAiMode('huggingface')
+      setAiOnline(true)
     }
   }
 
@@ -97,51 +101,33 @@ export default function OpenclowApp() {
       let aiText = ''
 
       if (aiMode === 'huggingface') {
-        // HuggingFace Inference API (free tier)
         const res = await fetch('/api/huggingface', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            prompt: `<|system|>You are openclow, a concise AI assistant. Give direct, practical answers. Be brief and helpful.</s><|user|>${userInput}</s><|assistant|>`
+            prompt: `You are openclow, a professional AI assistant. Provide clear, accurate, and helpful responses for software development, DevOps, coding, and general assistance. Be professional yet friendly.\n\nUser: ${userInput}\n\nAssistant:`
           })
         })
-
         if (!res.ok) throw new Error('HuggingFace unavailable')
         const data = await res.json()
         aiText = data.response
 
-      } else if (aiMode === 'gemini') {
-        // Cloud Gemini
+      } else {
         const geminiKey = process.env.NEXT_PUBLIC_GEMINI_KEY
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{
-              parts: [{ text: `You are openclow, a concise AI assistant. Give direct, practical answers. Be brief and helpful.\n\nUser: ${userInput}` }]
+              parts: [{ text: `You are openclow, a professional AI assistant. Be helpful and concise.\n\nUser: ${userInput}` }]
             }]
           })
         })
-
         if (!res.ok) throw new Error('Gemini unavailable')
         const data = await res.json()
         aiText = data.candidates[0].content.parts[0].text
-
-      } else {
-        // Cloud OpenAI (legacy fallback)
-        const res = await fetch('/api/openai', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: `You are openclow, a concise AI assistant. Give direct, practical answers. Be brief and helpful.\n\nUser: ${userInput}\n\nAssistant:`
-          })
-        })
-
-        if (!res.ok) throw new Error('OpenAI unavailable')
-        const data = await res.json()
-        aiText = data.response
       }
-      
+
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         text: aiText,
@@ -149,10 +135,16 @@ export default function OpenclowApp() {
         timestamp: new Date()
       }])
 
+      // Auto-detect task creation
+      if (userInput.toLowerCase().includes('remind me') || userInput.toLowerCase().includes('add task')) {
+        const task = userInput.replace(/remind me to|add task|remind me/gi, '').trim()
+        if (task) addTask(task, 'personal', 'medium')
+      }
+
     } catch (error: any) {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
-        text: `⚠️ ${aiMode === 'huggingface' ? 'HuggingFace' : aiMode === 'gemini' ? 'Gemini' : 'OpenAI'} Error: ${error.message}`,
+        text: `⚠️ Connection Error\n\nUnable to reach AI service: ${error.message}\n\nPlease check your API keys in environment variables.`,
         sender: 'ai',
         timestamp: new Date()
       }])
@@ -162,15 +154,25 @@ export default function OpenclowApp() {
     }
   }
 
-  const addTask = (text: string, category: Task['category'], priority: Task['priority']) => {
+  const addTask = (text: string, category: Task['category'], priority: Task['priority'], dueDate?: string) => {
     if (!text.trim()) return
     setTasks(prev => [...prev, {
       id: Date.now().toString(),
       text: text.trim(),
       completed: false,
       category,
-      priority
+      priority,
+      dueDate
     }])
+  }
+
+  const handleAddTask = () => {
+    if (!newTask.trim()) return
+    addTask(newTask, newTaskCategory, newTaskPriority, newTaskDue || undefined)
+    setNewTask('')
+    setNewTaskDue('')
+    setNewTaskPriority('medium')
+    setNewTaskCategory('personal')
   }
 
   const toggleTask = (id: string) => {
@@ -182,125 +184,167 @@ export default function OpenclowApp() {
   }
 
   const getPriorityColor = (priority: string) => {
-    switch(priority) {
-      case 'high': return 'from-red-500 to-red-600'
-      case 'medium': return 'from-yellow-500 to-yellow-600'
-      case 'low': return 'from-green-500 to-green-600'
-      default: return 'from-gray-500 to-gray-600'
+    switch (priority) {
+      case 'high': return 'bg-red-500'
+      case 'medium': return 'bg-yellow-500'
+      case 'low': return 'bg-green-500'
+      default: return 'bg-gray-500'
+    }
+  }
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'homework': return '📚'
+      case 'work': return '💼'
+      case 'devops': return '⚙️'
+      case 'personal': return '👤'
+      default: return '📌'
     }
   }
 
   return (
-    <div className="relative flex h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 overflow-hidden">
-      <div className="absolute top-1/4 -left-48 w-96 h-96 bg-blue-500/30 rounded-full filter blur-3xl animate-pulse"></div>
-      <div className="absolute bottom-1/4 -right-48 w-96 h-96 bg-purple-500/30 rounded-full filter blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
 
-      <div className="relative z-10 w-80 bg-slate-900/40 backdrop-blur-2xl border-r border-slate-700/30 flex flex-col shadow-2xl">
-        <div className="p-6 border-b border-slate-700/30">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl blur-md opacity-75"></div>
-              <div className="relative w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-2xl shadow-lg">
-                🤖
-              </div>
+      {/* Sidebar */}
+      <div className="w-72 bg-slate-900/50 backdrop-blur-xl border-r border-slate-700/50 flex flex-col">
+
+        {/* Logo */}
+        <div className="p-6 border-b border-slate-700/50">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-2xl shadow-lg shadow-blue-500/30">
+              🤖
             </div>
             <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
                 openclow
               </h1>
-              <p className="text-xs text-slate-400 font-mono">CLOUD MODE</p>
+              <p className="text-xs text-slate-400">AI Assistant v2.0</p>
             </div>
           </div>
+
+          {/* AI Status */}
           <div className="flex items-center gap-2 mt-4 px-3 py-2 bg-slate-800/50 rounded-lg border border-slate-700/30">
-            <div className={`w-2 h-2 rounded-full ${aiOnline ? 'bg-green-400 shadow-lg shadow-green-400/50 animate-pulse' : 'bg-red-400'}`}></div>
+            <div className={`w-2 h-2 rounded-full ${aiOnline ? 'bg-green-400 animate-pulse shadow-lg shadow-green-400/50' : 'bg-red-400'}`}></div>
             <span className="text-xs text-slate-300 font-medium">
-              {aiOnline ? (aiMode === 'huggingface' ? '🤗 HuggingFace' : aiMode === 'gemini' ? '☁️ Gemini' : '☁️ OpenAI') : 'Offline'}
+              {aiOnline
+                ? (aiMode === 'huggingface' ? '🤗 HuggingFace Online' : '☁️ Gemini Online')
+                : 'AI Offline'}
             </span>
           </div>
         </div>
 
-        <div className="flex-1 p-4 space-y-2 overflow-y-auto">
-          {['chat', 'tasks', 'about'].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab as any)}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all ${
-                activeTab === tab 
-                  ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-600/30' 
-                  : 'text-slate-300 hover:bg-slate-800/50'
-              }`}
-            >
-              <span className="text-xl">
-                {tab === 'chat' && '💬'}
-                {tab === 'tasks' && '✅'}
-                {tab === 'about' && 'ℹ️'}
-              </span>
-              <span className="font-medium capitalize">{tab}</span>
-            </button>
-          ))}
+        {/* Navigation */}
+        <div className="flex-1 p-4 space-y-2">
+          <button
+            onClick={() => setActiveTab('chat')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+              activeTab === 'chat'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/40'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <span className="text-xl">💬</span>
+            <span className="font-medium">Chat Assistant</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('tasks')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+              activeTab === 'tasks'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/40'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <span className="text-xl">✅</span>
+            <div className="flex-1 text-left">
+              <span className="font-medium">Tasks</span>
+              <span className="block text-xs opacity-70">{tasks.filter(t => !t.completed).length} active</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('about')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+              activeTab === 'about'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/40'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <span className="text-xl">ℹ️</span>
+            <span className="font-medium">About</span>
+          </button>
         </div>
 
-        <div className="p-4 border-t border-slate-700/30 bg-slate-900/20">
+        {/* System Info */}
+        <div className="p-4 border-t border-slate-700/50">
           <div className="text-xs text-slate-400 space-y-1 mb-3">
+            <div className="flex justify-between">
+              <span>Model:</span>
+              <span className="text-slate-300">{aiMode === 'huggingface' ? 'Qwen 2.5-7B' : 'Gemini Flash'}</span>
+            </div>
             <div className="flex justify-between">
               <span>Messages:</span>
               <span className="text-slate-300">{messages.length}</span>
             </div>
             <div className="flex justify-between">
-              <span>Mode:</span>
-              <span className="text-slate-300">{aiMode}</span>
+              <span>Tasks:</span>
+              <span className="text-slate-300">{tasks.length}</span>
             </div>
           </div>
-          <button 
+          <button
             onClick={checkAI}
-            className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg text-sm text-white font-medium transition-all shadow-lg hover:shadow-xl"
+            className="w-full py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-slate-300 transition-all"
           >
-            🔄 Refresh
+            🔄 Refresh Status
           </button>
         </div>
       </div>
 
-      <div className="relative z-10 flex-1 flex flex-col">
-        <div className="bg-slate-900/20 backdrop-blur-2xl border-b border-slate-700/30 px-8 py-5 shadow-lg">
-          <h2 className="text-3xl font-bold text-white mb-1">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+
+        {/* Header */}
+        <div className="bg-slate-900/30 backdrop-blur-xl border-b border-slate-700/50 px-8 py-4">
+          <h2 className="text-2xl font-bold text-white">
             {activeTab === 'chat' && '💬 Chat Assistant'}
             {activeTab === 'tasks' && '✅ Task Management'}
-            {activeTab === 'about' && 'ℹ️ About'}
+            {activeTab === 'about' && 'ℹ️ About openclow'}
           </h2>
-          <p className="text-sm text-slate-400">
-            {activeTab === 'chat' && `Powered by ${aiMode === 'huggingface' ? 'HuggingFace (Free)' : aiMode === 'gemini' ? 'Gemini (Cloud)' : 'OpenAI (Cloud)'}`}
-            {activeTab === 'tasks' && `${tasks.filter(t => !t.completed).length} active`}
-            {activeTab === 'about' && 'Cloud AI'}
+          <p className="text-sm text-slate-400 mt-1">
+            {activeTab === 'chat' && `Powered by ${aiMode === 'huggingface' ? 'HuggingFace (Free)' : 'Gemini (Cloud)'} — Running in cloud`}
+            {activeTab === 'tasks' && `${tasks.filter(t => !t.completed).length} active tasks`}
+            {activeTab === 'about' && 'Professional AI assistant for developers and students'}
           </p>
         </div>
 
+        {/* Chat View */}
         {activeTab === 'chat' && (
           <>
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fadeIn`}>
-                  <div className={`max-w-[75%] rounded-2xl px-6 py-4 shadow-xl ${
+                <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[70%] rounded-2xl px-5 py-3 ${
                     msg.sender === 'user'
-                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
-                      : 'bg-slate-800/60 backdrop-blur-xl text-slate-100 border border-slate-700/50'
+                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-600/20'
+                      : 'bg-slate-800/50 backdrop-blur-xl text-slate-100 border border-slate-700/50'
                   }`}>
                     <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-                    <p className="text-xs opacity-60 mt-3">
+                    <p className="text-xs opacity-60 mt-2">
                       {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
               ))}
               {isLoading && (
-                <div className="flex justify-start animate-fadeIn">
-                  <div className="bg-slate-800/60 backdrop-blur-xl rounded-2xl px-6 py-4 border border-slate-700/50 shadow-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="flex space-x-1.5">
-                        <div className="w-2.5 h-2.5 bg-blue-400 rounded-full animate-bounce shadow-lg shadow-blue-400/50"></div>
-                        <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce shadow-lg shadow-purple-400/50" style={{ animationDelay: '0.2s' }}></div>
-                        <div className="w-2.5 h-2.5 bg-pink-400 rounded-full animate-bounce shadow-lg shadow-pink-400/50" style={{ animationDelay: '0.4s' }}></div>
+                <div className="flex justify-start">
+                  <div className="bg-slate-800/50 backdrop-blur-xl rounded-2xl px-5 py-3 border border-slate-700/50">
+                    <div className="flex items-center gap-2">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        <div className="w-2 h-2 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
                       </div>
-                      <span className="text-sm text-slate-300 font-medium">Thinking...</span>
+                      <span className="text-sm text-slate-400">Thinking...</span>
                     </div>
                   </div>
                 </div>
@@ -308,71 +352,124 @@ export default function OpenclowApp() {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="bg-slate-900/20 backdrop-blur-2xl border-t border-slate-700/30 p-6 shadow-2xl">
+            <div className="bg-slate-900/30 backdrop-blur-xl border-t border-slate-700/50 p-6">
               <div className="flex gap-3">
                 <input
                   type="text"
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                  placeholder="Ask anything..."
-                  className="flex-1 bg-slate-800/60 border border-slate-700/50 rounded-xl px-6 py-4 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-lg"
+                  placeholder="Ask about coding, DevOps, or anything else..."
+                  className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-xl px-6 py-4 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                 />
                 <button
                   onClick={sendMessage}
                   disabled={isLoading || !aiOnline}
-                  className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-600 disabled:to-gray-600 text-white font-medium rounded-xl transition-all shadow-lg hover:scale-105 active:scale-95"
+                  className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-600 disabled:to-gray-600 text-white font-medium rounded-xl transition-all shadow-lg disabled:shadow-none hover:scale-105 active:scale-95"
                 >
-                  {isLoading ? '...' : '🚀'}
+                  {isLoading ? '...' : '🚀 Send'}
                 </button>
               </div>
             </div>
           </>
         )}
 
+        {/* Tasks View */}
         {activeTab === 'tasks' && (
           <div className="flex-1 overflow-y-auto p-8">
-            <div className="max-w-5xl mx-auto space-y-6">
-              <div className="bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-xl">
-                <h3 className="text-lg font-semibold text-white mb-4">➕ Add Task</h3>
-                <input
-                  type="text"
-                  placeholder="What needs to be done?"
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                      addTask(e.currentTarget.value, 'personal', 'medium')
-                      e.currentTarget.value = ''
-                    }
-                  }}
-                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-5 py-3.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg"
-                />
+            <div className="max-w-4xl mx-auto space-y-6">
+
+              {/* Add Task Form */}
+              <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">➕ Create New Task</h3>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={newTask}
+                    onChange={(e) => setNewTask(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleAddTask()}
+                    placeholder="Enter task description..."
+                    className="w-full bg-slate-800/50 border border-slate-700/50 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="flex gap-3">
+                    <select
+                      value={newTaskPriority}
+                      onChange={(e) => setNewTaskPriority(e.target.value as Task['priority'])}
+                      className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="low">🟢 Low Priority</option>
+                      <option value="medium">🟡 Medium Priority</option>
+                      <option value="high">🔴 High Priority</option>
+                    </select>
+                    <select
+                      value={newTaskCategory}
+                      onChange={(e) => setNewTaskCategory(e.target.value as Task['category'])}
+                      className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="personal">👤 Personal</option>
+                      <option value="work">💼 Work</option>
+                      <option value="homework">📚 Homework</option>
+                      <option value="devops">⚙️ DevOps</option>
+                    </select>
+                    <input
+                      type="date"
+                      value={newTaskDue}
+                      onChange={(e) => setNewTaskDue(e.target.value)}
+                      className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <button
+                    onClick={handleAddTask}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all shadow-lg shadow-blue-600/20"
+                  >
+                    Add Task
+                  </button>
+                </div>
               </div>
 
+              {/* Task List */}
               {tasks.length === 0 ? (
-                <div className="text-center py-20">
-                  <div className="text-7xl mb-4 animate-bounce">📋</div>
-                  <p className="text-2xl text-slate-300 font-semibold">No tasks yet</p>
+                <div className="text-center py-16">
+                  <div className="text-6xl mb-4">📋</div>
+                  <p className="text-xl text-slate-400">No tasks yet</p>
+                  <p className="text-sm text-slate-500 mt-2">Create your first task above</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {tasks.map(task => (
-                    <div key={task.id} className="group bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-xl p-5 hover:scale-[1.01] transition-all shadow-lg">
+                    <div
+                      key={task.id}
+                      className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-5 hover:border-slate-600/50 transition-all group"
+                    >
                       <div className="flex items-start gap-4">
                         <input
                           type="checkbox"
                           checked={task.completed}
                           onChange={() => toggleTask(task.id)}
-                          className="w-5 h-5 mt-1 rounded cursor-pointer"
+                          className="w-5 h-5 mt-1 rounded border-slate-600 cursor-pointer"
                         />
                         <div className="flex-1">
-                          <p className={`text-lg mb-2 ${task.completed ? 'line-through text-slate-500' : 'text-white'}`}>
+                          <p className={`text-lg ${task.completed ? 'line-through text-slate-500' : 'text-white'}`}>
                             {task.text}
                           </p>
-                          <span className={`text-xs px-3 py-1.5 rounded-lg bg-gradient-to-r ${getPriorityColor(task.priority)} text-white`}>
-                            {task.priority.toUpperCase()}
-                          </span>
+                          <div className="flex gap-2 mt-2 flex-wrap">
+                            <span className={`text-xs px-2 py-1 rounded ${getPriorityColor(task.priority)} text-white`}>
+                              {task.priority.toUpperCase()}
+                            </span>
+                            <span className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300">
+                              {getCategoryIcon(task.category)} {task.category}
+                            </span>
+                            {task.dueDate && (
+                              <span className="text-xs px-2 py-1 rounded bg-blue-900/50 text-blue-300 border border-blue-700/30">
+                                📅 {task.dueDate}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <button onClick={() => deleteTask(task.id)} className="opacity-0 group-hover:opacity-100 text-red-400">
+                        <button
+                          onClick={() => deleteTask(task.id)}
+                          className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-all"
+                        >
                           🗑️
                         </button>
                       </div>
@@ -384,29 +481,86 @@ export default function OpenclowApp() {
           </div>
         )}
 
+        {/* About View */}
         {activeTab === 'about' && (
           <div className="flex-1 overflow-y-auto p-8">
-            <div className="max-w-4xl mx-auto space-y-6">
-              <div className="bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-8 shadow-2xl">
-                <h3 className="text-3xl font-bold text-white mb-4">🤗 openclow — Free AI Mode</h3>
-                <p className="text-slate-300 text-lg">
-                  Powered by HuggingFace's free inference API — no credit card, no cost. Set <code className="text-blue-300">NEXT_PUBLIC_HUGGINGFACE_API_KEY</code> (and <code className="text-blue-300">HUGGINGFACE_API_KEY</code> server-side) to get started. Gemini is available as a fallback via <code className="text-blue-300">NEXT_PUBLIC_GEMINI_KEY</code>.
+            <div className="max-w-3xl mx-auto space-y-6">
+              <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 backdrop-blur-xl border border-blue-500/30 rounded-xl p-8">
+                <h3 className="text-2xl font-bold text-white mb-4">🤖 openclow v2.0</h3>
+                <p className="text-slate-300 leading-relaxed">
+                  A professional AI-powered assistant built with Next.js and HuggingFace cloud AI.
+                  Features intelligent task management with due dates, priorities, and categories — completely free!
                 </p>
+              </div>
+
+              <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-white mb-4">🛠️ Technology Stack</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  {[
+                    { label: 'Frontend', value: 'Next.js 16 + React' },
+                    { label: 'Styling', value: 'Tailwind CSS' },
+                    { label: 'AI Model', value: 'Qwen 2.5-7B (HuggingFace)' },
+                    { label: 'Fallback', value: 'Gemini Flash' },
+                    { label: 'Language', value: 'TypeScript' },
+                    { label: 'Hosting', value: 'Render / Cloudflare' },
+                  ].map(item => (
+                    <div key={item.label} className="bg-slate-800/50 px-4 py-3 rounded-lg">
+                      <div className="text-blue-400 font-medium">{item.label}</div>
+                      <div className="text-slate-300">{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-white mb-4">✨ Key Features</h4>
+                <ul className="space-y-2 text-slate-300">
+                  {[
+                    'HuggingFace cloud AI — free, no credit card',
+                    'Gemini fallback for reliability',
+                    'Real-time chat with context awareness',
+                    'Task management with due dates & priorities',
+                    'Category system: Work, DevOps, Homework, Personal',
+                    'Persistent storage using localStorage',
+                    'Modern glassmorphism UI design',
+                  ].map(f => (
+                    <li key={f} className="flex items-start gap-2">
+                      <span className="text-green-400 mt-0.5">✓</span>
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-6">
+                <h4 className="text-lg font-semibold text-white mb-4">📊 Session Stats</h4>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-3xl font-bold text-blue-400">{messages.length}</div>
+                    <div className="text-xs text-slate-400 mt-1">Messages</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold text-purple-400">{tasks.length}</div>
+                    <div className="text-xs text-slate-400 mt-1">Tasks</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold text-green-400">{tasks.filter(t => t.completed).length}</div>
+                    <div className="text-xs text-slate-400 mt-1">Completed</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-6 text-center">
+                <p className="text-slate-400 text-sm">Built with ❤️ by</p>
+                <p className="text-white font-bold text-lg mt-1">Rintu Chowdory</p>
+                <a href="https://github.com/rintuchowdory" className="text-blue-400 text-sm hover:underline">
+                  @rintuchowdory
+                </a>
               </div>
             </div>
           </div>
         )}
       </div>
-
-      <style jsx global>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out;
-        }
-      `}</style>
     </div>
   )
 }
