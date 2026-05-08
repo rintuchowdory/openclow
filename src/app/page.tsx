@@ -235,14 +235,6 @@ export default function OpenclowApp() {
     }])
   }
 
-  const handleAddTask = () => {
-    if (!newTask.trim()) return
-    addTask(newTask, newTaskCategory, newTaskPriority, newTaskDue || undefined)
-    setNewTask('')
-    setNewTaskDue('')
-    setNewTaskPriority('medium')
-    setNewTaskCategory('personal')
-  }
 
   const toggleTask = (id: string) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t))
