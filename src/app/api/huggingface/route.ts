@@ -1,40 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { HfInference } from '@huggingface/inference'
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt } = await request.json()
-    const apiKey = process.env.HUGGINGFACE_API_KEY
+    const { prompt, apiKey: clientApiKey } = await request.json()
+    const apiKey = clientApiKey || process.env.HUGGINGFACE_API_KEY
     if (!apiKey) {
-      return NextResponse.json({ error: 'HUGGINGFACE_API_KEY is not set' }, { status: 500 })
+      return NextResponse.json({ error: 'No HuggingFace API key provided' }, { status: 401 })
     }
 
-    const res = await fetch('https://router.huggingface.co/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'Qwen/Qwen2.5-7B-Instruct',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 512,
-        temperature: 0.7
-      })
+    const hf = new HfInference(apiKey)
+    
+    // We parse out the <|system|> ... <|user|> tags and just send the raw text, 
+    // or let the model handle the raw prompt block.
+    // Llama-3.2-1B-Instruct is extremely reliable on the free inference API.
+    const res = await hf.chatCompletion({
+      model: "meta-llama/Llama-3.2-1B-Instruct",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 512,
+      temperature: 0.7,
     })
 
-    const data = await res.json()
-    if (!res.ok) return NextResponse.json({ error: data.error?.message ?? 'HuggingFace failed' }, { status: res.status })
-
-    const response = data.choices?.[0]?.message?.content ?? ''
+    const response = res.choices[0]?.message?.content || ''
     return NextResponse.json({ response })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message || 'An error occurred during inference.' }, { status: 500 })
   }
 }
 
 export async function GET() {
-  const apiKey = process.env.HUGGINGFACE_API_KEY
-  return apiKey
-    ? NextResponse.json({ available: true })
-    : NextResponse.json({ available: false }, { status: 503 })
+  return NextResponse.json({ available: !!process.env.HUGGINGFACE_API_KEY })
 }
