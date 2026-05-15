@@ -235,7 +235,6 @@ export default function OpenclowApp() {
     }])
   }
 
-
   const toggleTask = (id: string) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t))
   }
@@ -256,18 +255,19 @@ export default function OpenclowApp() {
   const aiLabel = settings.aiMode === 'huggingface' ? 'HuggingFace' : settings.aiMode === 'gemini' ? 'Gemini' : 'OpenAI'
 
   return (
-    <div className="relative flex h-screen bg-[#0a0a0a] text-slate-200 overflow-hidden font-sans selection:bg-indigo-500/30">
+    <div className="relative flex h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-200 overflow-hidden font-sans selection:bg-indigo-500/30">
       {/* Ambient Background Gradients */}
-      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none"></div>
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/15 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none"></div>
+      <div className="absolute top-1/2 right-0 w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none"></div>
 
       {/* ─── Settings Modal ─── */}
       {showSettings && (
         <div className="absolute inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowSettings(false)}></div>
-          <div className="relative w-full max-w-lg bg-[#111111] border border-white/10 rounded-3xl p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-lg" onClick={() => setShowSettings(false)}></div>
+          <div className="relative w-full max-w-lg bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10 rounded-3xl p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-semibold text-white tracking-tight">Configuration</h2>
+              <h2 className="text-2xl font-bold text-white tracking-tight">Configuration</h2>
               <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-white transition-colors">
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -276,19 +276,19 @@ export default function OpenclowApp() {
             <div className="space-y-6">
               {/* AI Mode selector */}
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-3">Select Provider</label>
+                <label className="block text-sm font-semibold text-slate-300 mb-3">Select Provider</label>
                 <div className="grid grid-cols-3 gap-3">
                   {(['huggingface', 'gemini', 'openai'] as const).map(mode => (
                     <button
                       key={mode}
                       onClick={() => setSettingsDraft(d => ({ ...d, aiMode: mode }))}
-                      className={`py-3 px-4 rounded-xl text-sm font-medium transition-all duration-200 ${
+                      className={`py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-200 ${
                         settingsDraft.aiMode === mode
-                          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 ring-1 ring-indigo-500'
+                          ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-600/30 ring-1 ring-indigo-400'
                           : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200 ring-1 ring-white/10'
                       }`}
                     >
-                      {mode === 'huggingface' ? 'HuggingFace' : mode === 'gemini' ? 'Gemini' : 'OpenAI'}
+                      {mode === 'huggingface' ? '🤗 HuggingFace' : mode === 'gemini' ? '✨ Gemini' : '🚀 OpenAI'}
                     </button>
                   ))}
                 </div>
@@ -299,7 +299,7 @@ export default function OpenclowApp() {
                 {settingsDraft.aiMode === 'huggingface' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2">
                     <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-medium text-slate-300">HuggingFace Token</label>
+                      <label className="text-sm font-semibold text-slate-300">HuggingFace Token</label>
                       <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Get token ↗</a>
                     </div>
                     <input
@@ -307,7 +307,7 @@ export default function OpenclowApp() {
                       value={settingsDraft.huggingfaceKey}
                       onChange={e => setSettingsDraft(d => ({ ...d, huggingfaceKey: e.target.value }))}
                       placeholder="hf_..."
-                      className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                     />
                   </div>
                 )}
@@ -315,7 +315,7 @@ export default function OpenclowApp() {
                 {settingsDraft.aiMode === 'gemini' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2">
                     <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-medium text-slate-300">Gemini API Key</label>
+                      <label className="text-sm font-semibold text-slate-300">Gemini API Key</label>
                       <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Get key ↗</a>
                     </div>
                     <input
@@ -323,7 +323,7 @@ export default function OpenclowApp() {
                       value={settingsDraft.geminiKey}
                       onChange={e => setSettingsDraft(d => ({ ...d, geminiKey: e.target.value }))}
                       placeholder="AIza..."
-                      className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                     />
                   </div>
                 )}
@@ -331,7 +331,7 @@ export default function OpenclowApp() {
                 {settingsDraft.aiMode === 'openai' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2">
                     <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-medium text-slate-300">OpenAI API Key</label>
+                      <label className="text-sm font-semibold text-slate-300">OpenAI API Key</label>
                       <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Get key ↗</a>
                     </div>
                     <input
@@ -339,7 +339,7 @@ export default function OpenclowApp() {
                       value={settingsDraft.openaiKey}
                       onChange={e => setSettingsDraft(d => ({ ...d, openaiKey: e.target.value }))}
                       placeholder="sk-..."
-                      className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                     />
                   </div>
                 )}
@@ -349,393 +349,241 @@ export default function OpenclowApp() {
             <div className="flex gap-3 mt-8">
               <button
                 onClick={() => setShowSettings(false)}
-                className="flex-1 py-3.5 px-4 bg-transparent hover:bg-white/5 rounded-xl text-slate-300 font-medium transition-colors ring-1 ring-white/10"
+                className="flex-1 py-3.5 px-4 bg-transparent hover:bg-white/5 rounded-xl text-slate-300 font-semibold transition-colors ring-1 ring-white/10"
               >
                 Cancel
               </button>
               <button
                 onClick={saveSettings}
-                className="flex-1 py-3.5 px-4 bg-white text-black hover:bg-slate-200 rounded-xl font-medium transition-colors shadow-lg shadow-white/10"
+                className="flex-1 py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white hover:from-indigo-500 hover:to-indigo-400 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-600/30"
               >
-                Save Changes
+                Save & Start
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── Sidebar ─── */}
-      <div className="relative z-10 w-[280px] bg-[#111111]/80 backdrop-blur-2xl border-r border-white/5 flex flex-col">
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 text-white font-bold text-xl">
-              O
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-white tracking-tight">Openclow</h1>
-              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Ultra Edition</p>
+      {/* ─── Main Container ─── */}
+      <div className="flex w-full h-full">
+        {/* ─── Sidebar ─── */}
+        <div className="w-64 bg-gradient-to-b from-slate-900/50 to-slate-950/50 border-r border-white/5 flex flex-col backdrop-blur-sm">
+          {/* Logo */}
+          <div className="p-6 border-b border-white/5">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center">
+                <span className="text-white font-bold text-lg">C</span>
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-white">Openclow</h1>
+                <p className="text-xs text-slate-400">AI Assistant</p>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-1">
+          {/* Navigation Tabs */}
+          <div className="flex-1 p-4 space-y-2">
             {(['chat', 'tasks', 'about'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
                   activeTab === tab
-                    ? 'bg-white/10 text-white font-medium'
+                    ? 'bg-indigo-600/30 text-indigo-200 ring-1 ring-indigo-500/50'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
                 }`}
               >
-                <span className="text-[18px]">
-                  {tab === 'chat' && '✨'}
-                  {tab === 'tasks' && '📋'}
-                  {tab === 'about' && 'ℹ️'}
-                </span>
-                <span className="capitalize text-sm">{tab}</span>
+                {tab === 'chat' && '💬 Chat'}
+                {tab === 'tasks' && '✓ Tasks'}
+                {tab === 'about' && 'ℹ️ About'}
               </button>
             ))}
           </div>
-        </div>
 
-        <div className="mt-auto p-6 space-y-4">
           {/* Status Indicator */}
-          <div className="flex items-center gap-3 px-4 py-3 bg-white/5 rounded-xl border border-white/5">
-            <div className="relative flex h-2.5 w-2.5">
-              {aiOnline && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
-              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${aiOnline ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+          <div className="p-4 border-t border-white/5 space-y-3">
+            <div className="flex items-center gap-2 px-4 py-3 bg-white/5 rounded-lg ring-1 ring-white/10">
+              <div className={`w-2 h-2 rounded-full ${aiOnline ? 'bg-emerald-500' : 'bg-slate-500'}`}></div>
+              <span className="text-xs font-medium text-slate-300">{aiLabel} {aiOnline ? 'Online' : 'Offline'}</span>
             </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-medium text-slate-300">{aiLabel}</span>
-              <span className="text-[10px] text-slate-500">{aiOnline ? 'Connected' : 'Action Required'}</span>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setShowSettings(true)}
-            className="w-full flex items-center gap-3 px-4 py-3 bg-transparent hover:bg-white/5 border border-white/10 rounded-xl text-sm text-slate-300 font-medium transition-all group"
-          >
-            <span className="text-lg group-hover:rotate-45 transition-transform duration-300">⚙️</span>
-            Settings
-          </button>
-        </div>
-      </div>
-
-      {/* ─── Main Content ─── */}
-      <div className="relative z-10 flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <header className="h-20 flex items-center justify-between px-8 border-b border-white/5 bg-[#0a0a0a]/50 backdrop-blur-md">
-          <h2 className="text-xl font-semibold text-white tracking-tight flex items-center gap-2">
-            {activeTab === 'chat' && 'AI Assistant'}
-            {activeTab === 'tasks' && 'Tasks'}
-            {activeTab === 'about' && 'About Openclow'}
-          </h2>
-          <div className="flex items-center gap-4">
-             <button
+            <button
               onClick={() => setShowSettings(true)}
-              className="text-sm font-medium px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors border border-white/5"
+              className="w-full px-4 py-3 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 hover:from-indigo-600/30 hover:to-purple-600/30 text-slate-200 font-medium rounded-lg transition-all ring-1 ring-indigo-500/30"
             >
-              Model: <span className="text-indigo-400">{settings.aiMode}</span>
+              ⚙️ Settings
             </button>
           </div>
-        </header>
+        </div>
 
-        {/* Chat Interface */}
-        {activeTab === 'chat' && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
-              <div className="max-w-4xl mx-auto space-y-8 pb-4">
-                {messages.map((msg) => (
-                  <div key={msg.id} className={`flex w-full animate-in slide-in-from-bottom-2 fade-in duration-300 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`flex gap-4 max-w-[85%] ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                      {/* Avatar */}
-                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm shadow-sm ${
-                        msg.sender === 'user' 
-                          ? 'bg-indigo-600 text-white' 
-                          : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'
-                      }`}>
-                        {msg.sender === 'user' ? 'U' : 'O'}
-                      </div>
-                      
-                      {/* Message Bubble */}
-                      <div className={`group relative px-6 py-4 rounded-3xl ${
-                        msg.sender === 'user'
-                          ? 'bg-indigo-600 text-white rounded-tr-sm shadow-md'
-                          : 'bg-[#1a1a1a] border border-white/5 text-slate-200 rounded-tl-sm shadow-sm'
-                      }`}>
-                        {msg.sender === 'user' ? (
-                          <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-                        ) : (
-                          <div className="prose prose-invert prose-p:leading-relaxed prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10 prose-pre:rounded-xl max-w-none">
-                            <ReactMarkdown
-                              components={{
-                                code({node, inline, className, children, ...props}: any) {
-                                  const match = /language-(\w+)/.exec(className || '')
-                                  return !inline && match ? (
-                                    <SyntaxHighlighter
-                                      {...props}
-                                      style={vscDarkPlus}
-                                      language={match[1]}
-                                      PreTag="div"
-                                      className="rounded-lg text-sm !mt-4 !mb-4 !bg-[#050505]"
-                                    >
-                                      {String(children).replace(/\n$/, '')}
-                                    </SyntaxHighlighter>
-                                  ) : (
-                                    <code {...props} className={`${className} bg-white/10 px-1.5 py-0.5 rounded-md font-mono text-sm text-indigo-300`}>
-                                      {children}
-                                    </code>
-                                  )
-                                }
-                              }}
-                            >
-                              {msg.text}
-                            </ReactMarkdown>
-                          </div>
-                        )}
-                        <span className={`absolute -bottom-5 text-[10px] font-medium text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity ${msg.sender === 'user' ? 'right-2' : 'left-2'}`}>
-                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
+        {/* ─── Main Content ─── */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* ─── Chat Tab ─── */}
+          {activeTab === 'chat' && (
+            <>
+              {/* Messages Area */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {messages.map(msg => (
+                  <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-2xl ${msg.sender === 'user' ? 'bg-indigo-600/30 text-white' : 'bg-white/5'} rounded-2xl px-6 py-4 ring-1 ${msg.sender === 'user' ? 'ring-indigo-500/50' : 'ring-white/10'}`}>
+                      <ReactMarkdown
+                        components={{
+                          code: ({ node, inline, className, children, ...props }: any) => {
+                            const match = /language-(\w+)/.exec(className || '')
+                            return !inline && match ? (
+                              <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" {...props}>
+                                {String(children).replace(/\n$/, '')}
+                              </SyntaxHighlighter>
+                            ) : (
+                              <code className="bg-slate-800 px-2 py-1 rounded text-sm" {...props}>
+                                {children}
+                              </code>
+                            )
+                          }
+                        }}
+                      >
+                        {msg.text}
+                      </ReactMarkdown>
                     </div>
                   </div>
                 ))}
-                
                 {isLoading && (
-                  <div className="flex justify-start w-full animate-in fade-in">
-                    <div className="flex gap-4 max-w-[85%]">
-                       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm shadow-sm">
-                        O
-                      </div>
-                      <div className="bg-[#1a1a1a] border border-white/5 rounded-3xl rounded-tl-sm px-6 py-5 flex items-center gap-2">
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                  <div className="flex justify-start">
+                    <div className="bg-white/5 rounded-2xl px-6 py-4 ring-1 ring-white/10">
+                      <div className="flex gap-2">
                         <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                       </div>
                     </div>
                   </div>
                 )}
-                <div ref={messagesEndRef} className="h-4" />
+                <div ref={messagesEndRef} />
               </div>
-            </div>
 
-            {/* Input Area */}
-            <div className="p-4 md:p-8 pt-0">
-              <div className="max-w-4xl mx-auto relative">
-                {!aiOnline && (
-                  <div className="absolute -top-14 left-0 right-0 mx-auto w-fit bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs px-4 py-2 rounded-full backdrop-blur-md flex items-center gap-2">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                    </span>
-                    API Key Missing. Check Settings.
-                  </div>
-                )}
-                <div className="relative flex items-end gap-2 bg-[#1a1a1a] border border-white/10 rounded-3xl p-2 shadow-xl focus-within:ring-1 focus-within:ring-indigo-500/50 focus-within:border-indigo-500/50 transition-all">
-                  <textarea
+              {/* Input Area */}
+              <div className="border-t border-white/5 bg-gradient-to-t from-slate-950 to-slate-900/50 p-6 backdrop-blur-sm">
+                <div className="flex gap-3">
+                  <input
+                    type="text"
                     value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        sendMessage();
-                      }
-                    }}
-                    placeholder="Message Openclow..."
-                    className="flex-1 max-h-32 min-h-[44px] bg-transparent resize-none px-4 py-3 text-white placeholder-slate-500 focus:outline-none text-sm leading-relaxed"
-                    rows={1}
+                    onChange={e => setInputMessage(e.target.value)}
+                    onKeyPress={e => e.key === 'Enter' && sendMessage()}
+                    placeholder="Ask me anything..."
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                   />
                   <button
                     onClick={sendMessage}
-                    disabled={isLoading || !inputMessage.trim()}
-                    className="h-11 w-11 flex-shrink-0 flex items-center justify-center rounded-2xl bg-white text-black hover:bg-slate-200 disabled:bg-white/5 disabled:text-slate-600 transition-colors"
+                    disabled={isLoading}
+                    className="px-6 py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 disabled:opacity-50 text-white font-semibold rounded-xl transition-all shadow-lg shadow-indigo-600/30"
                   >
-                    <svg className="w-5 h-5 translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-7 7m7-7l7 7" />
-                    </svg>
+                    Send
                   </button>
                 </div>
-                <div className="text-center mt-3 text-[11px] text-slate-500 font-medium">
-                  Openclow can make mistakes. Consider verifying important information.
-                </div>
               </div>
-            </div>
-          </div>
-        )}
+            </>
+          )}
 
-        {/* Tasks Interface */}
-        {activeTab === 'tasks' && (
-          <div className="flex-1 overflow-y-auto p-8">
-            <div className="max-w-3xl mx-auto">
-              <div className="bg-[#1a1a1a] border border-white/5 rounded-3xl p-2 mb-8 flex items-center shadow-lg focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all">
-                <div className="pl-4 pr-2 text-slate-400">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                </div>
-                <input
-                  type="text"
-                  placeholder="Add a new task... (Press Enter)"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                      addTask(e.currentTarget.value, 'personal', 'medium')
-                      e.currentTarget.value = ''
-                    }
-                  }}
-                  className="flex-1 bg-transparent px-2 py-3 text-white placeholder-slate-500 focus:outline-none text-sm"
-                />
-              </div>
-
-              {/* Task List */}
-              {tasks.length === 0 ? (
-                <div className="text-center py-32 animate-in fade-in slide-in-from-bottom-4">
-                  <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 text-3xl border border-white/5">📋</div>
-                  <h3 className="text-lg font-medium text-white mb-2">No active tasks</h3>
-                  <p className="text-sm text-slate-400">Your workspace is clear. Add a task above to get started.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {tasks.map(task => (
-                    <div key={task.id} className="group flex items-center gap-4 bg-[#1a1a1a] border border-white/5 rounded-2xl p-4 hover:border-white/10 transition-colors animate-in fade-in slide-in-from-bottom-2">
-                      <button 
-                        onClick={() => toggleTask(task.id)}
-                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                          task.completed ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600 hover:border-slate-400'
-                        }`}
-                      >
-                        {task.completed && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                      </button>
-                      
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium truncate transition-colors ${task.completed ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
-                          {task.text}
-                        </p>
+          {/* ─── Tasks Tab ─── */}
+          {activeTab === 'tasks' && (
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="max-w-4xl">
+                <h2 className="text-2xl font-bold text-white mb-6">Your Tasks</h2>
+                {tasks.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-slate-400 text-lg">No tasks yet. Ask me to add one!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {tasks.map(task => (
+                      <div key={task.id} className="flex items-start gap-4 p-4 bg-white/5 rounded-xl ring-1 ring-white/10 hover:bg-white/10 transition-all">
+                        <button
+                          onClick={() => toggleTask(task.id)}
+                          className={`mt-1 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                            task.completed
+                              ? 'bg-emerald-600 border-emerald-500'
+                              : 'border-slate-400 hover:border-slate-300'
+                          }`}
+                        >
+                          {task.completed && <span className="text-white text-sm">✓</span>}
+                        </button>
+                        <div className="flex-1">
+                          <p className={`font-medium ${task.completed ? 'line-through text-slate-500' : 'text-white'}`}>
+                            {task.text}
+                          </p>
+                          <div className="flex gap-2 mt-2">
+                            <span className={`text-xs px-2 py-1 rounded-lg ring-1 ${getPriorityColor(task.priority)}`}>
+                              {task.priority}
+                            </span>
+                            <span className="text-xs px-2 py-1 rounded-lg bg-slate-700/50 text-slate-300 ring-1 ring-slate-600/50">
+                              {task.category}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => deleteTask(task.id)}
+                          className="text-slate-400 hover:text-red-400 transition-colors"
+                        >
+                          ✕
+                        </button>
                       </div>
-                      
-                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-semibold tracking-wider uppercase border ${getPriorityColor(task.priority)}`}>
-                        {task.priority}
-                      </span>
-                      
-                      <button 
-                        onClick={() => deleteTask(task.id)} 
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 transition-colors p-1"
-                        title="Delete task"
-                      >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* About Interface */}
-        {activeTab === 'about' && (
-          <div className="flex-1 overflow-y-auto p-8">
-            <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4">
-              <div className="bg-[#1a1a1a] border border-white/5 rounded-3xl p-10 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px]"></div>
-                
-                <h3 className="text-3xl font-bold text-white mb-4 tracking-tight relative z-10">Openclow Ultra</h3>
-                <p className="text-slate-400 text-base leading-relaxed mb-8 relative z-10">
-                  A high-performance, aesthetically refined AI interface designed for seamless interaction. It securely stores your keys locally and connects directly to premier inference APIs.
-                </p>
-                
-                <div className="grid gap-4 relative z-10">
-                  <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors group">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🤗</span>
-                      <span className="font-medium text-slate-200">HuggingFace Inference</span>
-                    </div>
-                    <span className="text-xs text-indigo-400 group-hover:translate-x-1 transition-transform">Get Token →</span>
-                  </a>
-                  
-                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors group">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">✨</span>
-                      <span className="font-medium text-slate-200">Google Gemini</span>
-                    </div>
-                    <span className="text-xs text-indigo-400 group-hover:translate-x-1 transition-transform">Get Token →</span>
-                  </a>
-                  
-                  <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors group">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🤖</span>
-                      <span className="font-medium text-slate-200">OpenAI Platform</span>
-                    </div>
-                    <span className="text-xs text-indigo-400 group-hover:translate-x-1 transition-transform">Get Token →</span>
-                  </a>
-                </div>
-              </div>
-
-              <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-6">
-                <h4 className="text-lg font-semibold text-white mb-4">🛠️ Technology Stack</h4>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  {[
-                    { label: 'Frontend', value: 'Next.js 16 + React' },
-                    { label: 'Styling', value: 'Tailwind CSS' },
-                    { label: 'AI Model', value: 'Qwen 2.5-7B (HuggingFace)' },
-                    { label: 'Fallback', value: 'Gemini Flash' },
-                    { label: 'Language', value: 'TypeScript' },
-                    { label: 'Hosting', value: 'Render / Cloudflare' },
-                  ].map(item => (
-                    <div key={item.label} className="bg-slate-800/50 px-4 py-3 rounded-lg">
-                      <div className="text-blue-400 font-medium">{item.label}</div>
-                      <div className="text-slate-300">{item.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-6">
-                <h4 className="text-lg font-semibold text-white mb-4">✨ Key Features</h4>
-                <ul className="space-y-2 text-slate-300">
-                  {[
-                    'HuggingFace cloud AI — free, no credit card',
-                    'Gemini fallback for reliability',
-                    'Real-time chat with context awareness',
-                    'Task management with due dates & priorities',
-                    'Category system: Work, DevOps, Homework, Personal',
-                    'Persistent storage using localStorage',
-                    'Modern glassmorphism UI design',
-                  ].map(f => (
-                    <li key={f} className="flex items-start gap-2">
-                      <span className="text-green-400 mt-0.5">✓</span>
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-6">
-                <h4 className="text-lg font-semibold text-white mb-4">📊 Session Stats</h4>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div className="text-3xl font-bold text-blue-400">{messages.length}</div>
-                    <div className="text-xs text-slate-400 mt-1">Messages</div>
+                    ))}
                   </div>
-                  <div>
-                    <div className="text-3xl font-bold text-purple-400">{tasks.length}</div>
-                    <div className="text-xs text-slate-400 mt-1">Tasks</div>
-                  </div>
-                  <div>
-                    <div className="text-3xl font-bold text-green-400">{tasks.filter(t => t.completed).length}</div>
-                    <div className="text-xs text-slate-400 mt-1">Completed</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-xl p-6 text-center">
-                <p className="text-slate-400 text-sm">Built with ❤️ by</p>
-                <p className="text-white font-bold text-lg mt-1">Rintu Chowdory</p>
-                <a href="https://github.com/rintuchowdory" className="text-blue-400 text-sm hover:underline">
-                  @rintuchowdory
-                </a>
+                )}
               </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* ─── About Tab ─── */}
+          {activeTab === 'about' && (
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="max-w-4xl space-y-6">
+                <div>
+                  <h2 className="text-3xl font-bold text-white mb-4">About Openclow ULTRA</h2>
+                  <p className="text-slate-300 text-lg leading-relaxed">
+                    Openclow ULTRA is a beautiful, modern AI chat application powered by cutting-edge language models. Built with Next.js, React, and Tailwind CSS, it provides a seamless experience for interacting with AI assistants.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/5 rounded-xl p-4 ring-1 ring-white/10">
+                    <h3 className="font-semibold text-indigo-400 mb-2">🤗 HuggingFace</h3>
+                    <p className="text-sm text-slate-400">Free-tier AI with no credit card required</p>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4 ring-1 ring-white/10">
+                    <h3 className="font-semibold text-indigo-400 mb-2">✨ Gemini</h3>
+                    <p className="text-sm text-slate-400">Google's advanced AI model</p>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4 ring-1 ring-white/10">
+                    <h3 className="font-semibold text-indigo-400 mb-2">🚀 OpenAI</h3>
+                    <p className="text-sm text-slate-400">Premium AI capabilities</p>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4 ring-1 ring-white/10">
+                    <h3 className="font-semibold text-indigo-400 mb-2">✓ Tasks</h3>
+                    <p className="text-sm text-slate-400">Built-in task management</p>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-indigo-600/20 to-purple-600/20 rounded-xl p-6 ring-1 ring-indigo-500/30">
+                  <h3 className="font-semibold text-white mb-2">Features</h3>
+                  <ul className="space-y-2 text-sm text-slate-300">
+                    <li>✓ Multiple AI provider support</li>
+                    <li>✓ Beautiful glassmorphism design</li>
+                    <li>✓ Real-time status indicator</li>
+                    <li>✓ Local storage persistence</li>
+                    <li>✓ Markdown support with syntax highlighting</li>
+                    <li>✓ Task management with priorities</li>
+                  </ul>
+                </div>
+
+                <div className="text-center pt-4">
+                  <p className="text-slate-400 text-sm">
+                    Built with ❤️ using Next.js, React, and Tailwind CSS
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
