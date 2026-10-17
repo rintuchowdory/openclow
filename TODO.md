@@ -6,5 +6,8 @@
 - [x] Tasks can be added without an AI key, completed, deleted, and saved locally; priorities, categories, and due dates remain available. They are a checklist, not scheduled notifications. Evidence: direct task form and validated state integration.
 - [ ] The repaired application has a reproducible server deployment with an unauthenticated health endpoint and is saved as a managed checkpoint. Container, lockfile, and health endpoint are ready; health returns HTTP 200. Checkpoint recording remains pending.
 - [ ] Publish the repaired checkpoint at a new URL and report any remaining credential requirement honestly.
+- [ ] The live Neural Console provides a keyboard-accessible command palette (`/` and `Ctrl/Cmd+K`), Escape-to-close behavior, and actions for changing tabs, opening Settings, and starting a fresh chat.
+- [ ] Chat exposes local interactive controls for copying messages, clearing the local conversation with confirmation, stopping an in-flight request, retrying the last failed prompt, and showing provider/request/message/latency telemetry without exposing credentials.
+- [ ] Tasks expose All/Open/Done filters and completion counts while preserving the existing local-only task form and persistence.
 
 Combined evidence: TypeScript and ESLint checks pass, all 16 automated regression tests pass. Original source was cloned from `rintuchowdory/openclow` at `f096a87`; the old supplied site returns 404. Original GitHub history is preserved unchanged.

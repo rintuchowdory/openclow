@@ -76,13 +76,21 @@ export default function OpenclowApp() {
   const [taskCategory, setTaskCategory] = useState<Task['category']>('personal')
   const [taskPriority, setTaskPriority] = useState<Task['priority']>('medium')
   const [taskDueDate, setTaskDueDate] = useState('')
+  const [showCommandPalette, setShowCommandPalette] = useState(false)
+  const [taskFilter, setTaskFilter] = useState<'all' | 'open' | 'done'>('all')
+  const [lastFailedPrompt, setLastFailedPrompt] = useState('')
+  const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const sendLockRef = useRef(false)
+  const requestControllerRef = useRef<AbortController | null>(null)
 
   const activeKey = useMemo(() => activeKeyFor(settings), [settings])
   const hasClientKey = activeKey.length > 0
   const isConfigured = hasClientKey || providerAvailable === true
   const aiLabel = settings.aiMode === 'huggingface' ? 'HuggingFace' : settings.aiMode === 'gemini' ? 'Gemini' : 'OpenAI'
+  const actualMessageCount = messages.filter(isActualConversationMessage).length
+  const openTaskCount = tasks.filter(task => !task.completed).length
+  const filteredTasks = tasks.filter(task => taskFilter === 'all' || (taskFilter === 'done' ? task.completed : !task.completed))
 
   // Hydration is deliberately state-driven so persistence effects cannot write defaults in this render pass.
   useEffect(() => {
@@ -178,6 +186,20 @@ export default function OpenclowApp() {
     return () => controller.abort()
   }, [hasClientKey, isHydrated, settings.aiMode])
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const editing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.tagName === 'SELECT'
+      if ((event.key === '/' && !editing) || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k')) {
+        event.preventDefault()
+        setShowCommandPalette(true)
+      }
+      if (event.key === 'Escape') setShowCommandPalette(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   const openSettings = () => {
     setSettingsDraft(settings)
     setShowSettings(true)
@@ -227,10 +249,28 @@ export default function OpenclowApp() {
     setTasks(previous => previous.filter(task => task.id !== id))
   }
 
-  const sendMessage = async () => {
+  const clearConversation = () => {
+    if (!window.confirm('Clear this local conversation? This cannot be undone.')) return
+    setMessages([welcomeMessage()])
+    setLastFailedPrompt('')
+  }
+
+  const copyMessage = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // Clipboard permission is optional; the conversation remains available.
+    }
+  }
+
+  const stopRequest = () => {
+    requestControllerRef.current?.abort()
+  }
+
+  const sendMessage = async (textOverride?: string) => {
     if (sendLockRef.current || isLoading) return
 
-    const text = inputMessage.trim()
+    const text = (textOverride ?? inputMessage).trim()
     if (!text) return
 
     if (!isConfigured) {
@@ -269,6 +309,8 @@ export default function OpenclowApp() {
     setIsLoading(true)
 
     const controller = new AbortController()
+    requestControllerRef.current = controller
+    const startedAt = Date.now()
     const timeoutId = window.setTimeout(() => controller.abort(), 65_000)
 
     try {
@@ -307,6 +349,8 @@ export default function OpenclowApp() {
         },
       ])
 
+      setLastFailedPrompt('')
+
       // Only successful conversations may create an inferred local checklist item.
       if (text.toLowerCase().includes('remind me') || text.toLowerCase().includes('add task')) {
         const task = text.replace(/remind me to|add task|remind me/gi, '').trim()
@@ -314,6 +358,7 @@ export default function OpenclowApp() {
       }
     } catch (error) {
       const timedOut = controller.signal.aborted
+      if (!timedOut || error instanceof DOMException) setLastFailedPrompt(text)
       setMessages(previous => [
         ...previous,
         {
@@ -326,6 +371,8 @@ export default function OpenclowApp() {
       ])
     } finally {
       window.clearTimeout(timeoutId)
+      requestControllerRef.current = null
+      setLastLatencyMs(Date.now() - startedAt)
       sendLockRef.current = false
       setIsLoading(false)
     }
@@ -421,6 +468,28 @@ export default function OpenclowApp() {
         </div>
       )}
 
+      {showCommandPalette && (
+        <div className="absolute inset-0 z-50 flex items-start justify-center bg-slate-950/70 p-4 pt-[12vh] backdrop-blur-sm" onClick={() => setShowCommandPalette(false)}>
+          <div className="digital-panel w-full max-w-xl rounded-2xl border border-cyan-300/30 bg-[#08101f] p-3 shadow-2xl" role="dialog" aria-modal="true" aria-label="Command palette" onClick={event => event.stopPropagation()}>
+            <div className="flex items-center gap-3 border-b border-white/10 px-3 pb-3 text-xs uppercase tracking-[0.2em] text-cyan-200">
+              <span className="text-cyan-400">⌘</span> Command palette <span className="ml-auto text-[10px] text-slate-500">ESC</span>
+            </div>
+            <div className="grid gap-1 pt-2">
+              {[
+                ['Go to chat', () => setActiveTab('chat')],
+                ['Open tasks', () => setActiveTab('tasks')],
+                ['Open settings', openSettings],
+                ['New conversation', clearConversation],
+              ].map(([label, action]) => (
+                <button key={label as string} type="button" className="flex items-center justify-between rounded-xl px-3 py-3 text-left text-sm text-slate-200 transition-colors hover:bg-cyan-300/10 hover:text-cyan-100" onClick={() => { (action as () => void)(); setShowCommandPalette(false) }}>
+                  <span>{label as string}</span><span className="text-xs text-slate-600">↵</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="relative z-10 flex h-full w-full flex-col md:flex-row">
         <aside className="flex w-full shrink-0 flex-col border-b border-white/5 bg-gradient-to-b from-slate-900/50 to-slate-950/50 backdrop-blur-sm md:w-64 md:border-b-0 md:border-r">
           <div className="border-b border-cyan-300/10 bg-slate-950/20 p-3 md:p-6">
@@ -461,8 +530,25 @@ export default function OpenclowApp() {
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-cyan-300/10 bg-slate-950/35 px-4 py-2 text-[10px] uppercase tracking-[0.16em] text-slate-500 sm:px-6">
+            <span className="text-cyan-300">{aiLabel}</span>
+            <span>{isLoading ? 'uplink active' : 'standby'}</span>
+            <span>{actualMessageCount} msgs</span>
+            <span>{openTaskCount} open tasks</span>
+            {lastLatencyMs !== null && <span>last {lastLatencyMs}ms</span>}
+            <span className="ml-auto">{isHydrated ? 'local vault ready' : 'hydrating'}</span>
+          </div>
           {activeTab === 'chat' && (
             <>
+              <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-2 sm:px-6">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">channel / primary</span>
+                <div className="flex items-center gap-2">
+                  {lastFailedPrompt && <button type="button" onClick={() => void sendMessage(lastFailedPrompt)} className="rounded-lg px-2 py-1 text-[10px] uppercase tracking-wider text-amber-300 ring-1 ring-amber-300/20 hover:bg-amber-300/10">retry</button>}
+                  {isLoading && <button type="button" onClick={stopRequest} className="rounded-lg px-2 py-1 text-[10px] uppercase tracking-wider text-rose-300 ring-1 ring-rose-300/20 hover:bg-rose-300/10">stop</button>}
+                  <button type="button" onClick={clearConversation} className="rounded-lg px-2 py-1 text-[10px] uppercase tracking-wider text-slate-500 ring-1 ring-white/10 hover:bg-white/5 hover:text-slate-200">clear</button>
+                  <button type="button" onClick={() => setShowCommandPalette(true)} className="hidden rounded-lg px-2 py-1 text-[10px] uppercase tracking-wider text-slate-500 ring-1 ring-white/10 hover:text-cyan-200 sm:inline-flex">⌘K</button>
+                </div>
+              </div>
               <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                 <div className="space-y-4">
                   {messages.map(message => (
@@ -484,6 +570,9 @@ export default function OpenclowApp() {
                         >
                           {message.text}
                         </ReactMarkdown>
+                        <button type="button" onClick={() => void copyMessage(message.text)} className="mt-3 text-[10px] uppercase tracking-[0.16em] text-slate-600 transition-colors hover:text-cyan-300" aria-label={`Copy ${message.sender} message`}>
+                          copy signal
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -521,6 +610,13 @@ export default function OpenclowApp() {
               <div className="mx-auto max-w-4xl">
                 <h2 className="mb-2 text-2xl font-bold text-white">Your Tasks</h2>
                 <p className="mb-6 text-sm text-slate-400">Tasks and reminders are a local checklist only; no notifications are sent.</p>
+                <div className="mb-5 flex flex-wrap items-center gap-2" role="group" aria-label="Task filter">
+                  {(['all', 'open', 'done'] as const).map(filter => (
+                    <button key={filter} type="button" onClick={() => setTaskFilter(filter)} className={`rounded-lg px-3 py-2 text-[10px] uppercase tracking-[0.16em] ring-1 transition-colors ${taskFilter === filter ? 'bg-cyan-300/10 text-cyan-100 ring-cyan-300/30' : 'text-slate-500 ring-white/10 hover:text-slate-200'}`}>
+                      {filter === 'all' ? `all ${tasks.length}` : filter === 'open' ? `open ${openTaskCount}` : `done ${tasks.length - openTaskCount}`}
+                    </button>
+                  ))}
+                </div>
 
                 <form onSubmit={submitTask} className="mb-6 grid gap-3 rounded-2xl bg-white/5 p-4 ring-1 ring-white/10 sm:grid-cols-2">
                   <div className="sm:col-span-2">
@@ -546,11 +642,11 @@ export default function OpenclowApp() {
                   <div className="flex items-end sm:col-span-2"><button type="submit" className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-3 font-semibold text-white shadow-lg shadow-indigo-600/30 transition-all hover:from-indigo-500 hover:to-indigo-400 sm:w-auto">Add task</button></div>
                 </form>
 
-                {tasks.length === 0 ? (
-                  <div className="py-10 text-center"><p className="text-lg text-slate-400">No tasks yet. Add one above or ask in chat after configuring a key.</p></div>
+                {filteredTasks.length === 0 ? (
+                  <div className="py-10 text-center"><p className="text-lg text-slate-400">{taskFilter === 'all' ? 'No tasks yet. Add one above or ask in chat after configuring a key.' : taskFilter === 'open' ? 'All tasks are complete.' : 'No completed tasks yet.'}</p></div>
                 ) : (
                   <div className="space-y-3">
-                    {tasks.map(task => (
+                    {filteredTasks.map(task => (
                       <div key={task.id} className="flex items-start gap-3 rounded-xl bg-white/5 p-4 ring-1 ring-white/10 transition-all hover:bg-white/10 sm:gap-4">
                         <button type="button" onClick={() => toggleTask(task.id)} aria-label={`${task.completed ? 'Mark incomplete' : 'Mark complete'}: ${task.text}`} className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition-all ${task.completed ? 'border-emerald-500 bg-emerald-600' : 'border-slate-400 hover:border-slate-300'}`}>{task.completed && <span className="text-sm text-white">✓</span>}</button>
                         <div className="min-w-0 flex-1">
