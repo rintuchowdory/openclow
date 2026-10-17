@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Openclow — AI Assistant',
-  description: 'Chat with Hugging Face, Gemini, or OpenAI and organize your tasks in one workspace.',
+  title: 'Openclow — Neural Console',
+  description: 'A digital AI console for chat, code, and local task control.',
   icons: { icon: '/logo.svg' },
 }
 export const viewport: Viewport = { width: 'device-width', initialScale: 1 }

@@ -340,7 +340,8 @@ export default function OpenclowApp() {
   }
 
   return (
-    <div className="relative flex h-dvh overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 font-sans text-slate-200 selection:bg-indigo-500/30">
+    <div className="digital-grid relative flex h-dvh overflow-hidden font-mono text-slate-200 selection:bg-cyan-400/30">
+      <div className="digital-scanlines pointer-events-none absolute inset-0 z-20 opacity-40" />
       <div className="pointer-events-none absolute left-1/4 top-0 h-[500px] w-[500px] rounded-full bg-indigo-600/15 blur-[120px]" />
       <div className="pointer-events-none absolute bottom-0 right-1/4 h-[600px] w-[600px] rounded-full bg-purple-600/10 blur-[150px]" />
       <div className="pointer-events-none absolute right-0 top-1/2 h-[400px] w-[400px] rounded-full bg-blue-600/10 blur-[100px]" />
@@ -348,9 +349,9 @@ export default function OpenclowApp() {
       {showSettings && (
         <div className="absolute inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
           <button aria-label="Close settings" className="absolute inset-0 cursor-default bg-black/70 backdrop-blur-lg" onClick={closeSettings} />
-          <div className="relative my-auto max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl border border-white/10 bg-gradient-to-br from-slate-800 to-slate-900 p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:p-8">
+          <div className="digital-panel relative my-auto max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl border border-cyan-300/20 bg-[#0a1020]/95 p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:p-8">
             <div className="mb-6 flex items-center justify-between sm:mb-8">
-              <h2 className="text-2xl font-bold tracking-tight text-white">Configuration</h2>
+              <h2 className="digital-glow text-2xl font-bold tracking-tight text-cyan-100">System configuration</h2>
               <button onClick={closeSettings} aria-label="Close settings" className="text-slate-400 transition-colors hover:text-white">
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -414,7 +415,7 @@ export default function OpenclowApp() {
 
             <div className="mt-8 flex gap-3">
               <button type="button" onClick={closeSettings} className="flex-1 rounded-xl bg-transparent px-4 py-3.5 font-semibold text-slate-300 ring-1 ring-white/10 transition-colors hover:bg-white/5">Cancel</button>
-              <button type="button" onClick={saveSettings} className="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-3.5 font-semibold text-white shadow-lg shadow-indigo-600/30 transition-all hover:from-indigo-500 hover:to-indigo-400">Save</button>
+                  <button type="button" onClick={saveSettings} className="flex-1 rounded-xl bg-cyan-300/15 px-4 py-3.5 font-semibold text-cyan-100 shadow-lg shadow-cyan-500/10 ring-1 ring-cyan-300/30 transition-all hover:bg-cyan-300/25">Save</button>
             </div>
           </div>
         </div>
@@ -422,12 +423,12 @@ export default function OpenclowApp() {
 
       <div className="relative z-10 flex h-full w-full flex-col md:flex-row">
         <aside className="flex w-full shrink-0 flex-col border-b border-white/5 bg-gradient-to-b from-slate-900/50 to-slate-950/50 backdrop-blur-sm md:w-64 md:border-b-0 md:border-r">
-          <div className="flex items-center justify-between border-b border-white/5 p-3 md:block md:p-6">
+          <div className="border-b border-cyan-300/10 bg-slate-950/20 p-3 md:p-6">
             <div className="flex items-center gap-3 md:mb-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600"><span className="text-lg font-bold text-white">C</span></div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-cyan-300/50 bg-cyan-300/10 shadow-[0_0_28px_rgba(34,211,238,0.2)]"><span className="text-lg font-bold text-cyan-200">C</span></div>
               <div>
-                <h1 className="text-lg font-bold text-white">Openclow</h1>
-                <p className="text-xs text-slate-400">AI Assistant · {isConfigured ? 'Configured' : 'Key required'}</p>
+                <h1 className="digital-glow text-lg font-bold uppercase tracking-[0.18em] text-cyan-100">Openclow</h1>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Neural console · {isConfigured ? 'ready' : 'key required'}</p>
               </div>
             </div>
             <button type="button" onClick={openSettings} aria-label="Open settings" className="rounded-lg p-2 text-slate-300 ring-1 ring-white/10 transition-colors hover:bg-white/10 hover:text-white md:hidden">⚙️</button>
@@ -440,7 +441,7 @@ export default function OpenclowApp() {
                 type="button"
                 onClick={() => setActiveTab(tab)}
                 className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 md:w-full md:px-4 md:py-3 md:text-left ${
-                  activeTab === tab ? 'bg-indigo-600/30 text-indigo-200 ring-1 ring-indigo-500/50' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                  activeTab === tab ? 'bg-cyan-300/10 text-cyan-100 ring-1 ring-cyan-300/30' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                 }`}
               >
                 {tab === 'chat' && '💬 Chat'}
@@ -466,7 +467,7 @@ export default function OpenclowApp() {
                 <div className="space-y-4">
                   {messages.map(message => (
                     <div key={message.id} className={`flex min-w-0 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`min-w-0 max-w-full break-words rounded-2xl px-4 py-4 ring-1 [overflow-wrap:anywhere] sm:max-w-2xl sm:px-6 ${message.sender === 'user' ? 'bg-indigo-600/30 text-white ring-indigo-500/50' : 'bg-white/5 ring-white/10'}`}>
+                      <div className={`digital-panel min-w-0 max-w-full break-words rounded-2xl px-4 py-4 ring-1 [overflow-wrap:anywhere] sm:max-w-2xl sm:px-6 ${message.sender === 'user' ? 'bg-cyan-300/10 text-cyan-50 ring-cyan-300/30' : 'bg-slate-950/45 ring-white/10'}`}>
                         <ReactMarkdown
                           components={{
                             code: ({ className, children }) => {
