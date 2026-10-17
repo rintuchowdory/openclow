@@ -1,31 +1,64 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import {
+  AI_MODES,
+  type AiMode,
+  parseStoredMessages,
+  parseStoredSettings,
+  parseStoredTasks,
+  serializeSettings,
+  type StoredMessage,
+  type StoredTask,
+} from '@/lib/storage'
 
-interface Message {
-  id: string
-  text: string
-  sender: 'user' | 'ai'
-  timestamp: Date
-}
+type Message = Omit<StoredMessage, 'timestamp'> & { timestamp: Date }
 
-interface Task {
-  id: string
-  text: string
-  completed: boolean
-  priority: 'low' | 'medium' | 'high'
-  category: 'homework' | 'work' | 'devops' | 'personal'
-  dueDate?: string
-}
+type Task = StoredTask
 
 interface Settings {
   huggingfaceKey: string
   geminiKey: string
   openaiKey: string
-  aiMode: 'huggingface' | 'gemini' | 'openai'
+  aiMode: AiMode
+}
+
+const EMPTY_SETTINGS: Settings = {
+  huggingfaceKey: '',
+  geminiKey: '',
+  openaiKey: '',
+  aiMode: 'huggingface',
+}
+
+const welcomeMessage = (): Message => ({
+  id: crypto.randomUUID(),
+  text: '👋 **Welcome to Openclow!**\n\nChoose an AI provider in **Settings**, enter a key for this browser session, and start chatting.\n\nI can write code, analyze data, or just have a chat.',
+  sender: 'ai',
+  timestamp: new Date(),
+  kind: 'welcome',
+})
+
+const activeKeyFor = (settings: Settings) => {
+  if (settings.aiMode === 'huggingface') return settings.huggingfaceKey.trim()
+  if (settings.aiMode === 'gemini') return settings.geminiKey.trim()
+  return settings.openaiKey.trim()
+}
+
+const isActualConversationMessage = (message: Message) => {
+  const isLegacyWelcome = message.id === '1' && message.sender === 'ai' && message.text.includes('Welcome to Openclow')
+  const isLegacyError = message.sender === 'ai' && (
+    message.text.startsWith('**Error Details:**') ||
+    message.text.startsWith('⚠️ **Authentication Required**')
+  )
+  return message.kind !== 'welcome' && message.kind !== 'error' && !isLegacyWelcome && !isLegacyError
+}
+
+const errorText = (error: unknown) => {
+  if (error instanceof Error) return error.message
+  return 'The request could not be completed. Please try again.'
 }
 
 export default function OpenclowApp() {
@@ -34,258 +67,308 @@ export default function OpenclowApp() {
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'chat' | 'tasks' | 'about'>('chat')
-  const [aiOnline, setAiOnline] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [settings, setSettings] = useState<Settings>({
-    huggingfaceKey: '',
-    geminiKey: '',
-    openaiKey: '',
-    aiMode: 'huggingface'
-  })
-  const [settingsDraft, setSettingsDraft] = useState<Settings>(settings)
+  const [isHydrated, setIsHydrated] = useState(false)
+  const [providerAvailable, setProviderAvailable] = useState<boolean | null>(null)
+  const [settings, setSettings] = useState<Settings>(EMPTY_SETTINGS)
+  const [settingsDraft, setSettingsDraft] = useState<Settings>(EMPTY_SETTINGS)
+  const [taskText, setTaskText] = useState('')
+  const [taskCategory, setTaskCategory] = useState<Task['category']>('personal')
+  const [taskPriority, setTaskPriority] = useState<Task['priority']>('medium')
+  const [taskDueDate, setTaskDueDate] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const sendLockRef = useRef(false)
 
-  // Load everything from localStorage on mount
+  const activeKey = useMemo(() => activeKeyFor(settings), [settings])
+  const hasClientKey = activeKey.length > 0
+  const isConfigured = hasClientKey || providerAvailable === true
+  const aiLabel = settings.aiMode === 'huggingface' ? 'HuggingFace' : settings.aiMode === 'gemini' ? 'Gemini' : 'OpenAI'
+
+  // Hydration is deliberately state-driven so persistence effects cannot write defaults in this render pass.
   useEffect(() => {
-    const savedMessages = localStorage.getItem('openclow-messages')
-    if (savedMessages) {
-      // Restore date objects
-      const parsed = JSON.parse(savedMessages).map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) }))
-      setMessages(parsed)
-    } else {
-      setMessages([{
-        id: '1',
-        text: "👋 **Welcome to Openclow ULTRA!**\n\nYour premium AI assistant powered by cutting-edge models. Free, fast, and beautifully designed.\n\n### Quick Start\n1. Click the **⚙️ Settings** button (top right)\n2. Enter your API key (e.g. from [HuggingFace](https://huggingface.co/settings/tokens))\n3. Start chatting!\n\nI can write code, analyze data, or just have a chat.",
-        sender: 'ai',
-        timestamp: new Date()
-      }])
+    let restoredMessages: Message[] | null = null
+    let restoredTasks: Task[] | null = null
+    let restoredMode: AiMode = EMPTY_SETTINGS.aiMode
+
+    try {
+      const parsedMessages = parseStoredMessages(localStorage.getItem('openclow-messages'))
+      if (parsedMessages) {
+        restoredMessages = parsedMessages.map(message => ({
+          ...message,
+          timestamp: new Date(message.timestamp),
+        }))
+      }
+
+      const parsedTasks = parseStoredTasks(localStorage.getItem('openclow-tasks'))
+      if (parsedTasks) restoredTasks = parsedTasks
+
+      // Only aiMode is read from older settings; credential fields are intentionally discarded.
+      const parsedSettings = parseStoredSettings(localStorage.getItem('openclow-settings'))
+      if (parsedSettings) restoredMode = parsedSettings.aiMode
+
+      // Rewriting this value removes legacy credential fields without inspecting or displaying them.
+      localStorage.setItem('openclow-settings', serializeSettings(restoredMode))
+    } catch {
+      // Private browsing, quota, and malformed storage should never prevent the interface from loading.
     }
 
-    const savedTasks = localStorage.getItem('openclow-tasks')
-    if (savedTasks) setTasks(JSON.parse(savedTasks))
-
-    // Load saved settings
-    const savedSettings = localStorage.getItem('openclow-settings')
-    if (savedSettings) {
-      const parsed = JSON.parse(savedSettings)
-      setSettings(parsed)
-      setSettingsDraft(parsed)
-    }
+    const nextSettings = { ...EMPTY_SETTINGS, aiMode: restoredMode }
+    setMessages(restoredMessages ?? [welcomeMessage()])
+    setTasks(restoredTasks ?? [])
+    setSettings(nextSettings)
+    setSettingsDraft(nextSettings)
+    setIsHydrated(true)
   }, [])
 
-  // Recheck AI status whenever settings change
   useEffect(() => {
-    checkAI(settings)
-  }, [settings])
+    if (!isHydrated) return
+    try {
+      localStorage.setItem('openclow-messages', JSON.stringify(messages))
+    } catch {
+      // Storage is optional; keep the current in-memory state usable.
+    }
+  }, [isHydrated, messages])
 
   useEffect(() => {
-    if (messages.length > 0) localStorage.setItem('openclow-messages', JSON.stringify(messages))
-  }, [messages])
+    if (!isHydrated) return
+    try {
+      localStorage.setItem('openclow-tasks', JSON.stringify(tasks))
+    } catch {
+      // Storage is optional; keep the current in-memory state usable.
+    }
+  }, [isHydrated, tasks])
 
   useEffect(() => {
-    localStorage.setItem('openclow-tasks', JSON.stringify(tasks))
-  }, [tasks])
+    if (!isHydrated) return
+    try {
+      // Never serialize provider credentials. They exist only in this page's React state.
+      localStorage.setItem('openclow-settings', serializeSettings(settings.aiMode))
+    } catch {
+      // A storage failure does not affect a configured in-memory key.
+    }
+  }, [isHydrated, settings.aiMode])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, isLoading])
 
-  const checkAI = async (s: Settings) => {
-    let hasLocalKey = false;
-    if (s.aiMode === 'huggingface' && s.huggingfaceKey.trim()) hasLocalKey = true;
-    if (s.aiMode === 'gemini' && s.geminiKey.trim()) hasLocalKey = true;
-    if (s.aiMode === 'openai' && s.openaiKey.trim()) hasLocalKey = true;
-
-    if (hasLocalKey) {
-      setAiOnline(true);
-      return;
+  useEffect(() => {
+    if (!isHydrated || hasClientKey) {
+      setProviderAvailable(null)
+      return
     }
 
-    try {
-      const res = await fetch(`/api/${s.aiMode}`);
-      if (res.ok) {
-        const data = await res.json();
-        setAiOnline(data.available);
-      } else {
-        setAiOnline(false);
+    const controller = new AbortController()
+    setProviderAvailable(null)
+
+    const checkAvailability = async () => {
+      try {
+        const response = await fetch(`/api/${settings.aiMode}`, { signal: controller.signal })
+        const data: unknown = response.ok ? await response.json() : null
+        const available = typeof data === 'object' && data !== null &&
+          (data as { available?: unknown }).available === true
+        if (!controller.signal.aborted) setProviderAvailable(available)
+      } catch {
+        // A transient check failure is unknown, not a persistent offline state.
+        if (!controller.signal.aborted) setProviderAvailable(null)
       }
-    } catch {
-      setAiOnline(false);
     }
+
+    void checkAvailability()
+    return () => controller.abort()
+  }, [hasClientKey, isHydrated, settings.aiMode])
+
+  const openSettings = () => {
+    setSettingsDraft(settings)
+    setShowSettings(true)
+  }
+
+  const closeSettings = () => {
+    setSettingsDraft(settings)
+    setShowSettings(false)
   }
 
   const saveSettings = () => {
     setSettings(settingsDraft)
-    localStorage.setItem('openclow-settings', JSON.stringify(settingsDraft))
     setShowSettings(false)
   }
 
-  const sendMessage = async () => {
-    if (!inputMessage.trim()) return
+  const addTask = (text: string, category: Task['category'], priority: Task['priority'], dueDate?: string) => {
+    const trimmedText = text.trim()
+    if (!trimmedText) return
 
-    if (!aiOnline) {
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        text: '⚠️ **Authentication Required**\n\nPlease open **Settings** (top right) and enter your API key to continue.',
-        sender: 'ai',
-        timestamp: new Date()
-      }])
+    setTasks(previous => [
+      ...previous,
+      {
+        id: crypto.randomUUID(),
+        text: trimmedText,
+        completed: false,
+        category,
+        priority,
+        ...(dueDate ? { dueDate } : {}),
+      },
+    ])
+  }
+
+  const submitTask = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    addTask(taskText, taskCategory, taskPriority, taskDueDate || undefined)
+    setTaskText('')
+    setTaskCategory('personal')
+    setTaskPriority('medium')
+    setTaskDueDate('')
+  }
+
+  const toggleTask = (id: string) => {
+    setTasks(previous => previous.map(task => task.id === id ? { ...task, completed: !task.completed } : task))
+  }
+
+  const deleteTask = (id: string) => {
+    setTasks(previous => previous.filter(task => task.id !== id))
+  }
+
+  const sendMessage = async () => {
+    if (sendLockRef.current || isLoading) return
+
+    const text = inputMessage.trim()
+    if (!text) return
+
+    if (!isConfigured) {
+      setMessages(previous => [
+        ...previous,
+        {
+          id: crypto.randomUUID(),
+          text: '⚠️ **Key required**\n\nOpen **Settings** from the navigation and enter a key for the selected provider.',
+          sender: 'ai',
+          timestamp: new Date(),
+          kind: 'error',
+        },
+      ])
       return
     }
 
+    // State updates are async, so this synchronous lock prevents duplicate submits in the same event turn.
+    sendLockRef.current = true
     const userMessage: Message = {
-      id: Date.now().toString(),
-      text: inputMessage,
+      id: crypto.randomUUID(),
+      text,
       sender: 'user',
-      timestamp: new Date()
+      timestamp: new Date(),
+      kind: 'chat',
     }
+    const conversation = [...messages, userMessage]
+      .filter(isActualConversationMessage)
+      .slice(-20)
+      .map(message => ({
+        role: message.sender === 'user' ? 'user' as const : 'assistant' as const,
+        content: message.text,
+      }))
 
-    setMessages(prev => [...prev, userMessage])
-    const userInput = inputMessage
+    setMessages(previous => [...previous, userMessage])
     setInputMessage('')
     setIsLoading(true)
 
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), 65_000)
+
     try {
-      let aiText = ''
+      const response = await fetch(`/api/${settings.aiMode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({ messages: conversation, apiKey: activeKey }),
+      })
 
-      if (settings.aiMode === 'huggingface') {
-        const res = await fetch('/api/huggingface', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: `<|system|>You are Openclow, a state-of-the-art AI assistant. You are helpful, brilliant, and professional. Format your responses with beautiful Markdown.</s><|user|>${userInput}</s><|assistant|>`,
-            apiKey: settings.huggingfaceKey
-          })
-        })
-        if (!res.ok) {
-          const err = await res.json()
-          throw new Error(err.error || 'HuggingFace unavailable')
-        }
-        const data = await res.json()
-        aiText = data.response
-
-      } else if (settings.aiMode === 'gemini') {
-        const res = await fetch('/api/gemini', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: `You are Openclow, a state-of-the-art AI assistant. Format your responses with beautiful Markdown.\n\nUser: ${userInput}`,
-            apiKey: settings.geminiKey
-          })
-        })
-        if (!res.ok) {
-          const err = await res.json()
-          throw new Error(err.error || 'Gemini unavailable')
-        }
-        const data = await res.json()
-        aiText = data.response
-
-      } else {
-        const res = await fetch('/api/openai', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: `You are Openclow, a state-of-the-art AI assistant. Format your responses with beautiful Markdown.\n\nUser: ${userInput}\n\nAssistant:`,
-            apiKey: settings.openaiKey
-          })
-        })
-        if (!res.ok) {
-          const err = await res.json()
-          throw new Error(err.error || 'OpenAI unavailable')
-        }
-        const data = await res.json()
-        aiText = data.response
+      let data: unknown
+      try {
+        data = await response.json()
+      } catch {
+        throw new Error('The provider returned an invalid response.')
       }
 
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        text: aiText,
-        sender: 'ai',
-        timestamp: new Date()
-      }])
+      const error = typeof data === 'object' && data !== null && typeof (data as { error?: unknown }).error === 'string'
+        ? (data as { error: string }).error
+        : null
+      const aiText = typeof data === 'object' && data !== null && typeof (data as { response?: unknown }).response === 'string'
+        ? (data as { response: string }).response.trim()
+        : ''
 
-      // Auto-detect task creation
-      if (userInput.toLowerCase().includes('remind me') || userInput.toLowerCase().includes('add task')) {
-        const task = userInput.replace(/remind me to|add task|remind me/gi, '').trim()
+      if (!response.ok) throw new Error(error || `The provider request failed (${response.status}).`)
+      if (!aiText) throw new Error('The provider returned an empty response.')
+
+      setMessages(previous => [
+        ...previous,
+        {
+          id: crypto.randomUUID(),
+          text: aiText,
+          sender: 'ai',
+          timestamp: new Date(),
+          kind: 'chat',
+        },
+      ])
+
+      // Only successful conversations may create an inferred local checklist item.
+      if (text.toLowerCase().includes('remind me') || text.toLowerCase().includes('add task')) {
+        const task = text.replace(/remind me to|add task|remind me/gi, '').trim()
         if (task) addTask(task, 'personal', 'medium')
       }
-
-    } catch (error: any) {
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        text: `**Error Details:**\n\`\`\`\n${error.message}\n\`\`\`\n\nPlease check your API key in **Settings**. If the issue persists, the selected model might be temporarily unavailable.`,
-        sender: 'ai',
-        timestamp: new Date()
-      }])
-      setAiOnline(false)
+    } catch (error) {
+      const timedOut = controller.signal.aborted
+      setMessages(previous => [
+        ...previous,
+        {
+          id: crypto.randomUUID(),
+          text: `**Request error**\n\n${timedOut ? 'The request timed out. Please try again.' : errorText(error)}`,
+          sender: 'ai',
+          timestamp: new Date(),
+          kind: 'error',
+        },
+      ])
     } finally {
+      window.clearTimeout(timeoutId)
+      sendLockRef.current = false
       setIsLoading(false)
     }
   }
 
-  const addTask = (text: string, category: Task['category'], priority: Task['priority'], dueDate?: string) => {
-    if (!text.trim()) return
-    setTasks(prev => [...prev, {
-      id: Date.now().toString(),
-      text: text.trim(),
-      completed: false,
-      category,
-      priority,
-      dueDate
-    }])
-  }
-
-  const toggleTask = (id: string) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t))
-  }
-
-  const deleteTask = (id: string) => {
-    setTasks(prev => prev.filter(t => t.id !== id))
-  }
-
-  const getPriorityColor = (priority: string) => {
+  const getPriorityColor = (priority: Task['priority']) => {
     switch (priority) {
       case 'high': return 'bg-rose-500/20 text-rose-400 border-rose-500/30'
       case 'medium': return 'bg-amber-500/20 text-amber-400 border-amber-500/30'
       case 'low': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-      default: return 'bg-slate-500/20 text-slate-400 border-slate-500/30'
     }
   }
 
-  const aiLabel = settings.aiMode === 'huggingface' ? 'HuggingFace' : settings.aiMode === 'gemini' ? 'Gemini' : 'OpenAI'
-
   return (
-    <div className="relative flex h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-200 overflow-hidden font-sans selection:bg-indigo-500/30">
-      {/* Ambient Background Gradients */}
-      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/15 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none"></div>
-      <div className="absolute top-1/2 right-0 w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none"></div>
+    <div className="relative flex h-dvh overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 font-sans text-slate-200 selection:bg-indigo-500/30">
+      <div className="pointer-events-none absolute left-1/4 top-0 h-[500px] w-[500px] rounded-full bg-indigo-600/15 blur-[120px]" />
+      <div className="pointer-events-none absolute bottom-0 right-1/4 h-[600px] w-[600px] rounded-full bg-purple-600/10 blur-[150px]" />
+      <div className="pointer-events-none absolute right-0 top-1/2 h-[400px] w-[400px] rounded-full bg-blue-600/10 blur-[100px]" />
 
-      {/* ─── Settings Modal ─── */}
       {showSettings && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-lg" onClick={() => setShowSettings(false)}></div>
-          <div className="relative w-full max-w-lg bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10 rounded-3xl p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-bold text-white tracking-tight">Configuration</h2>
-              <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-white transition-colors">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        <div className="absolute inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
+          <button aria-label="Close settings" className="absolute inset-0 cursor-default bg-black/70 backdrop-blur-lg" onClick={closeSettings} />
+          <div className="relative my-auto max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl border border-white/10 bg-gradient-to-br from-slate-800 to-slate-900 p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:p-8">
+            <div className="mb-6 flex items-center justify-between sm:mb-8">
+              <h2 className="text-2xl font-bold tracking-tight text-white">Configuration</h2>
+              <button onClick={closeSettings} aria-label="Close settings" className="text-slate-400 transition-colors hover:text-white">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
             <div className="space-y-6">
-              {/* AI Mode selector */}
               <div>
-                <label className="block text-sm font-semibold text-slate-300 mb-3">Select Provider</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {(['huggingface', 'gemini', 'openai'] as const).map(mode => (
+                <label className="mb-3 block text-sm font-semibold text-slate-300">Select Provider</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+                  {AI_MODES.map(mode => (
                     <button
                       key={mode}
-                      onClick={() => setSettingsDraft(d => ({ ...d, aiMode: mode }))}
-                      className={`py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                      type="button"
+                      onClick={() => setSettingsDraft(draft => ({ ...draft, aiMode: mode }))}
+                      className={`rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${
                         settingsDraft.aiMode === mode
                           ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-600/30 ring-1 ring-indigo-400'
-                          : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200 ring-1 ring-white/10'
+                          : 'bg-white/5 text-slate-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-slate-200'
                       }`}
                     >
                       {mode === 'huggingface' ? '🤗 HuggingFace' : mode === 'gemini' ? '✨ Gemini' : '🚀 OpenAI'}
@@ -294,103 +377,70 @@ export default function OpenclowApp() {
                 </div>
               </div>
 
-              {/* API Key Inputs */}
-              <div className="bg-white/5 rounded-2xl p-5 ring-1 ring-white/10">
+              <div className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/10">
                 {settingsDraft.aiMode === 'huggingface' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-semibold text-slate-300">HuggingFace Token</label>
-                      <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Get token ↗</a>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <label htmlFor="huggingface-key" className="text-sm font-semibold text-slate-300">HuggingFace Token</label>
+                      <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="text-xs text-indigo-400 transition-colors hover:text-indigo-300">Get token ↗</a>
                     </div>
-                    <input
-                      type="password"
-                      value={settingsDraft.huggingfaceKey}
-                      onChange={e => setSettingsDraft(d => ({ ...d, huggingfaceKey: e.target.value }))}
-                      placeholder="hf_..."
-                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                    />
+                    <input id="huggingface-key" type="password" value={settingsDraft.huggingfaceKey} onChange={event => setSettingsDraft(draft => ({ ...draft, huggingfaceKey: event.target.value }))} placeholder="hf_..." autoComplete="off" className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3.5 text-white placeholder-slate-600 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                   </div>
                 )}
 
                 {settingsDraft.aiMode === 'gemini' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-semibold text-slate-300">Gemini API Key</label>
-                      <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Get key ↗</a>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <label htmlFor="gemini-key" className="text-sm font-semibold text-slate-300">Gemini API Key</label>
+                      <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-xs text-indigo-400 transition-colors hover:text-indigo-300">Get key ↗</a>
                     </div>
-                    <input
-                      type="password"
-                      value={settingsDraft.geminiKey}
-                      onChange={e => setSettingsDraft(d => ({ ...d, geminiKey: e.target.value }))}
-                      placeholder="AIza..."
-                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                    />
+                    <input id="gemini-key" type="password" value={settingsDraft.geminiKey} onChange={event => setSettingsDraft(draft => ({ ...draft, geminiKey: event.target.value }))} placeholder="AIza..." autoComplete="off" className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3.5 text-white placeholder-slate-600 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                   </div>
                 )}
 
                 {settingsDraft.aiMode === 'openai' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-semibold text-slate-300">OpenAI API Key</label>
-                      <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Get key ↗</a>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <label htmlFor="openai-key" className="text-sm font-semibold text-slate-300">OpenAI API Key</label>
+                      <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-xs text-indigo-400 transition-colors hover:text-indigo-300">Get key ↗</a>
                     </div>
-                    <input
-                      type="password"
-                      value={settingsDraft.openaiKey}
-                      onChange={e => setSettingsDraft(d => ({ ...d, openaiKey: e.target.value }))}
-                      placeholder="sk-..."
-                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                    />
+                    <input id="openai-key" type="password" value={settingsDraft.openaiKey} onChange={event => setSettingsDraft(draft => ({ ...draft, openaiKey: event.target.value }))} placeholder="sk-..." autoComplete="off" className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3.5 text-white placeholder-slate-600 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                   </div>
                 )}
               </div>
+
+              <p className="text-sm leading-relaxed text-slate-400">Provider keys stay only in this page&apos;s current memory. They are not saved to browser storage.</p>
             </div>
 
-            <div className="flex gap-3 mt-8">
-              <button
-                onClick={() => setShowSettings(false)}
-                className="flex-1 py-3.5 px-4 bg-transparent hover:bg-white/5 rounded-xl text-slate-300 font-semibold transition-colors ring-1 ring-white/10"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveSettings}
-                className="flex-1 py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white hover:from-indigo-500 hover:to-indigo-400 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-600/30"
-              >
-                Save & Start
-              </button>
+            <div className="mt-8 flex gap-3">
+              <button type="button" onClick={closeSettings} className="flex-1 rounded-xl bg-transparent px-4 py-3.5 font-semibold text-slate-300 ring-1 ring-white/10 transition-colors hover:bg-white/5">Cancel</button>
+              <button type="button" onClick={saveSettings} className="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-3.5 font-semibold text-white shadow-lg shadow-indigo-600/30 transition-all hover:from-indigo-500 hover:to-indigo-400">Save</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── Main Container ─── */}
-      <div className="flex w-full h-full">
-        {/* ─── Sidebar ─── */}
-        <div className="w-64 bg-gradient-to-b from-slate-900/50 to-slate-950/50 border-r border-white/5 flex flex-col backdrop-blur-sm">
-          {/* Logo */}
-          <div className="p-6 border-b border-white/5">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center">
-                <span className="text-white font-bold text-lg">C</span>
-              </div>
+      <div className="relative z-10 flex h-full w-full flex-col md:flex-row">
+        <aside className="flex w-full shrink-0 flex-col border-b border-white/5 bg-gradient-to-b from-slate-900/50 to-slate-950/50 backdrop-blur-sm md:w-64 md:border-b-0 md:border-r">
+          <div className="flex items-center justify-between border-b border-white/5 p-3 md:block md:p-6">
+            <div className="flex items-center gap-3 md:mb-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600"><span className="text-lg font-bold text-white">C</span></div>
               <div>
                 <h1 className="text-lg font-bold text-white">Openclow</h1>
-                <p className="text-xs text-slate-400">AI Assistant</p>
+                <p className="text-xs text-slate-400">AI Assistant · {isConfigured ? 'Configured' : 'Key required'}</p>
               </div>
             </div>
+            <button type="button" onClick={openSettings} aria-label="Open settings" className="rounded-lg p-2 text-slate-300 ring-1 ring-white/10 transition-colors hover:bg-white/10 hover:text-white md:hidden">⚙️</button>
           </div>
 
-          {/* Navigation Tabs */}
-          <div className="flex-1 p-4 space-y-2">
+          <nav aria-label="Primary navigation" className="flex gap-1 overflow-x-auto p-2 md:flex-1 md:flex-col md:gap-2 md:p-4">
             {(['chat', 'tasks', 'about'] as const).map(tab => (
               <button
                 key={tab}
+                type="button"
                 onClick={() => setActiveTab(tab)}
-                className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
-                  activeTab === tab
-                    ? 'bg-indigo-600/30 text-indigo-200 ring-1 ring-indigo-500/50'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 md:w-full md:px-4 md:py-3 md:text-left ${
+                  activeTab === tab ? 'bg-indigo-600/30 text-indigo-200 ring-1 ring-indigo-500/50' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                 }`}
               >
                 {tab === 'chat' && '💬 Chat'}
@@ -398,133 +448,119 @@ export default function OpenclowApp() {
                 {tab === 'about' && 'ℹ️ About'}
               </button>
             ))}
-          </div>
+          </nav>
 
-          {/* Status Indicator */}
-          <div className="p-4 border-t border-white/5 space-y-3">
-            <div className="flex items-center gap-2 px-4 py-3 bg-white/5 rounded-lg ring-1 ring-white/10">
-              <div className={`w-2 h-2 rounded-full ${aiOnline ? 'bg-emerald-500' : 'bg-slate-500'}`}></div>
-              <span className="text-xs font-medium text-slate-300">{aiLabel} {aiOnline ? 'Online' : 'Offline'}</span>
+          <div className="hidden space-y-3 border-t border-white/5 p-4 md:block">
+            <div title={providerAvailable === true ? 'Provider availability check completed' : undefined} className="flex items-center gap-2 rounded-lg bg-white/5 px-4 py-3 ring-1 ring-white/10">
+              <div className={`h-2 w-2 rounded-full ${isConfigured ? 'bg-emerald-500' : 'bg-slate-500'}`} />
+              <span className="text-xs font-medium text-slate-300">{aiLabel} · {isConfigured ? 'Configured' : 'Key required'}</span>
             </div>
-            <button
-              onClick={() => setShowSettings(true)}
-              className="w-full px-4 py-3 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 hover:from-indigo-600/30 hover:to-purple-600/30 text-slate-200 font-medium rounded-lg transition-all ring-1 ring-indigo-500/30"
-            >
-              ⚙️ Settings
-            </button>
+            <button type="button" onClick={openSettings} className="w-full rounded-lg bg-gradient-to-r from-indigo-600/20 to-purple-600/20 px-4 py-3 font-medium text-slate-200 ring-1 ring-indigo-500/30 transition-all hover:from-indigo-600/30 hover:to-purple-600/30">⚙️ Settings</button>
           </div>
-        </div>
+        </aside>
 
-        {/* ─── Main Content ─── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* ─── Chat Tab ─── */}
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {activeTab === 'chat' && (
             <>
-              {/* Messages Area */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                {messages.map(msg => (
-                  <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-2xl ${msg.sender === 'user' ? 'bg-indigo-600/30 text-white' : 'bg-white/5'} rounded-2xl px-6 py-4 ring-1 ${msg.sender === 'user' ? 'ring-indigo-500/50' : 'ring-white/10'}`}>
-                      <ReactMarkdown
-                        components={{
-                          code: ({ node, inline, className, children, ...props }: any) => {
-                            const match = /language-(\w+)/.exec(className || '')
-                            return !inline && match ? (
-                              <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" {...props}>
-                                {String(children).replace(/\n$/, '')}
-                              </SyntaxHighlighter>
-                            ) : (
-                              <code className="bg-slate-800 px-2 py-1 rounded text-sm" {...props}>
-                                {children}
-                              </code>
-                            )
-                          }
-                        }}
-                      >
-                        {msg.text}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                ))}
-                {isLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-white/5 rounded-2xl px-6 py-4 ring-1 ring-white/10">
-                      <div className="flex gap-2">
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                <div className="space-y-4">
+                  {messages.map(message => (
+                    <div key={message.id} className={`flex min-w-0 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`min-w-0 max-w-full break-words rounded-2xl px-4 py-4 ring-1 [overflow-wrap:anywhere] sm:max-w-2xl sm:px-6 ${message.sender === 'user' ? 'bg-indigo-600/30 text-white ring-indigo-500/50' : 'bg-white/5 ring-white/10'}`}>
+                        <ReactMarkdown
+                          components={{
+                            code: ({ className, children }) => {
+                              const match = /language-(\w+)/.exec(className || '')
+                              return match ? (
+                                <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" wrapLongLines customStyle={{ maxWidth: '100%', overflowX: 'auto' }}>
+                                  {String(children).replace(/\n$/, '')}
+                                </SyntaxHighlighter>
+                              ) : (
+                                <code className="whitespace-pre-wrap break-words rounded bg-slate-800 px-2 py-1 text-sm">{children}</code>
+                              )
+                            },
+                          }}
+                        >
+                          {message.text}
+                        </ReactMarkdown>
                       </div>
                     </div>
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
+                  ))}
+                  {isLoading && (
+                    <div className="flex justify-start"><div className="rounded-2xl bg-white/5 px-6 py-4 ring-1 ring-white/10"><div className="flex gap-2"><div className="h-2 w-2 animate-bounce rounded-full bg-indigo-500" /><div className="h-2 w-2 animate-bounce rounded-full bg-indigo-500" style={{ animationDelay: '0.1s' }} /><div className="h-2 w-2 animate-bounce rounded-full bg-indigo-500" style={{ animationDelay: '0.2s' }} /></div></div></div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
               </div>
 
-              {/* Input Area */}
-              <div className="border-t border-white/5 bg-gradient-to-t from-slate-950 to-slate-900/50 p-6 backdrop-blur-sm">
+              <div className="border-t border-white/5 bg-gradient-to-t from-slate-950 to-slate-900/50 p-4 backdrop-blur-sm sm:p-6">
                 <div className="flex gap-3">
                   <input
                     type="text"
                     value={inputMessage}
-                    onChange={e => setInputMessage(e.target.value)}
-                    onKeyPress={e => e.key === 'Enter' && sendMessage()}
-                    placeholder="Ask me anything..."
-                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                  />
-                  <button
-                    onClick={sendMessage}
                     disabled={isLoading}
-                    className="px-6 py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 disabled:opacity-50 text-white font-semibold rounded-xl transition-all shadow-lg shadow-indigo-600/30"
-                  >
-                    Send
-                  </button>
+                    onChange={event => setInputMessage(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' && !event.nativeEvent.isComposing && !isLoading) {
+                        event.preventDefault()
+                        void sendMessage()
+                      }
+                    }}
+                    placeholder="Ask me anything..."
+                    className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3.5 text-white placeholder-slate-500 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                  <button type="button" onClick={() => void sendMessage()} disabled={isLoading} className="rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-3.5 font-semibold text-white shadow-lg shadow-indigo-600/30 transition-all hover:from-indigo-500 hover:to-indigo-400 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6">Send</button>
                 </div>
               </div>
             </>
           )}
 
-          {/* ─── Tasks Tab ─── */}
           {activeTab === 'tasks' && (
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-4xl">
-                <h2 className="text-2xl font-bold text-white mb-6">Your Tasks</h2>
-                {tasks.length === 0 ? (
-                  <div className="text-center py-12">
-                    <p className="text-slate-400 text-lg">No tasks yet. Ask me to add one!</p>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="mx-auto max-w-4xl">
+                <h2 className="mb-2 text-2xl font-bold text-white">Your Tasks</h2>
+                <p className="mb-6 text-sm text-slate-400">Tasks and reminders are a local checklist only; no notifications are sent.</p>
+
+                <form onSubmit={submitTask} className="mb-6 grid gap-3 rounded-2xl bg-white/5 p-4 ring-1 ring-white/10 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <label htmlFor="task-text" className="mb-1.5 block text-sm font-medium text-slate-300">Task</label>
+                    <input id="task-text" value={taskText} onChange={event => setTaskText(event.target.value)} required placeholder="Add a task" className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder-slate-600 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                   </div>
+                  <div>
+                    <label htmlFor="task-category" className="mb-1.5 block text-sm font-medium text-slate-300">Category</label>
+                    <select id="task-category" value={taskCategory} onChange={event => setTaskCategory(event.target.value as Task['category'])} className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      <option value="personal">Personal</option><option value="work">Work</option><option value="homework">Homework</option><option value="devops">DevOps</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="task-priority" className="mb-1.5 block text-sm font-medium text-slate-300">Priority</label>
+                    <select id="task-priority" value={taskPriority} onChange={event => setTaskPriority(event.target.value as Task['priority'])} className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="task-due-date" className="mb-1.5 block text-sm font-medium text-slate-300">Due date <span className="text-slate-500">(optional)</span></label>
+                    <input id="task-due-date" type="date" value={taskDueDate} onChange={event => setTaskDueDate(event.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div className="flex items-end sm:col-span-2"><button type="submit" className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-3 font-semibold text-white shadow-lg shadow-indigo-600/30 transition-all hover:from-indigo-500 hover:to-indigo-400 sm:w-auto">Add task</button></div>
+                </form>
+
+                {tasks.length === 0 ? (
+                  <div className="py-10 text-center"><p className="text-lg text-slate-400">No tasks yet. Add one above or ask in chat after configuring a key.</p></div>
                 ) : (
                   <div className="space-y-3">
                     {tasks.map(task => (
-                      <div key={task.id} className="flex items-start gap-4 p-4 bg-white/5 rounded-xl ring-1 ring-white/10 hover:bg-white/10 transition-all">
-                        <button
-                          onClick={() => toggleTask(task.id)}
-                          className={`mt-1 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
-                            task.completed
-                              ? 'bg-emerald-600 border-emerald-500'
-                              : 'border-slate-400 hover:border-slate-300'
-                          }`}
-                        >
-                          {task.completed && <span className="text-white text-sm">✓</span>}
-                        </button>
-                        <div className="flex-1">
-                          <p className={`font-medium ${task.completed ? 'line-through text-slate-500' : 'text-white'}`}>
-                            {task.text}
-                          </p>
-                          <div className="flex gap-2 mt-2">
-                            <span className={`text-xs px-2 py-1 rounded-lg ring-1 ${getPriorityColor(task.priority)}`}>
-                              {task.priority}
-                            </span>
-                            <span className="text-xs px-2 py-1 rounded-lg bg-slate-700/50 text-slate-300 ring-1 ring-slate-600/50">
-                              {task.category}
-                            </span>
+                      <div key={task.id} className="flex items-start gap-3 rounded-xl bg-white/5 p-4 ring-1 ring-white/10 transition-all hover:bg-white/10 sm:gap-4">
+                        <button type="button" onClick={() => toggleTask(task.id)} aria-label={`${task.completed ? 'Mark incomplete' : 'Mark complete'}: ${task.text}`} className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition-all ${task.completed ? 'border-emerald-500 bg-emerald-600' : 'border-slate-400 hover:border-slate-300'}`}>{task.completed && <span className="text-sm text-white">✓</span>}</button>
+                        <div className="min-w-0 flex-1">
+                          <p className={`break-words font-medium [overflow-wrap:anywhere] ${task.completed ? 'text-slate-500 line-through' : 'text-white'}`}>{task.text}</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span className={`rounded-lg px-2 py-1 text-xs ring-1 ${getPriorityColor(task.priority)}`}>{task.priority}</span>
+                            <span className="rounded-lg bg-slate-700/50 px-2 py-1 text-xs text-slate-300 ring-1 ring-slate-600/50">{task.category}</span>
+                            {task.dueDate && <span className="rounded-lg bg-indigo-500/15 px-2 py-1 text-xs text-indigo-200 ring-1 ring-indigo-500/30">Due {task.dueDate}</span>}
                           </div>
                         </div>
-                        <button
-                          onClick={() => deleteTask(task.id)}
-                          className="text-slate-400 hover:text-red-400 transition-colors"
-                        >
-                          ✕
-                        </button>
+                        <button type="button" onClick={() => deleteTask(task.id)} aria-label={`Delete task: ${task.text}`} className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-red-400">✕</button>
                       </div>
                     ))}
                   </div>
@@ -533,57 +569,36 @@ export default function OpenclowApp() {
             </div>
           )}
 
-          {/* ─── About Tab ─── */}
           {activeTab === 'about' && (
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-4xl space-y-6">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="mx-auto max-w-4xl space-y-6">
                 <div>
-                  <h2 className="text-3xl font-bold text-white mb-4">About Openclow ULTRA</h2>
-                  <p className="text-slate-300 text-lg leading-relaxed">
-                    Openclow ULTRA is a beautiful, modern AI chat application powered by cutting-edge language models. Built with Next.js, React, and Tailwind CSS, it provides a seamless experience for interacting with AI assistants.
-                  </p>
+                  <h2 className="mb-4 text-3xl font-bold text-white">About Openclow</h2>
+                  <p className="text-lg leading-relaxed text-slate-300">Openclow is a modern AI chat application built with Next.js, React, and Tailwind CSS for working with your chosen provider.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white/5 rounded-xl p-4 ring-1 ring-white/10">
-                    <h3 className="font-semibold text-indigo-400 mb-2">🤗 HuggingFace</h3>
-                    <p className="text-sm text-slate-400">Free-tier AI with no credit card required</p>
-                  </div>
-                  <div className="bg-white/5 rounded-xl p-4 ring-1 ring-white/10">
-                    <h3 className="font-semibold text-indigo-400 mb-2">✨ Gemini</h3>
-                    <p className="text-sm text-slate-400">Google's advanced AI model</p>
-                  </div>
-                  <div className="bg-white/5 rounded-xl p-4 ring-1 ring-white/10">
-                    <h3 className="font-semibold text-indigo-400 mb-2">🚀 OpenAI</h3>
-                    <p className="text-sm text-slate-400">Premium AI capabilities</p>
-                  </div>
-                  <div className="bg-white/5 rounded-xl p-4 ring-1 ring-white/10">
-                    <h3 className="font-semibold text-indigo-400 mb-2">✓ Tasks</h3>
-                    <p className="text-sm text-slate-400">Built-in task management</p>
-                  </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10"><h3 className="mb-2 font-semibold text-indigo-400">🤗 HuggingFace</h3><p className="text-sm text-slate-400">Use your own HuggingFace provider key.</p></div>
+                  <div className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10"><h3 className="mb-2 font-semibold text-indigo-400">✨ Gemini</h3><p className="text-sm text-slate-400">Use your own Google Gemini API key.</p></div>
+                  <div className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10"><h3 className="mb-2 font-semibold text-indigo-400">🚀 OpenAI</h3><p className="text-sm text-slate-400">Use your own OpenAI API key.</p></div>
+                  <div className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10"><h3 className="mb-2 font-semibold text-indigo-400">✓ Tasks</h3><p className="text-sm text-slate-400">A local checklist with priorities and optional due dates.</p></div>
                 </div>
 
-                <div className="bg-gradient-to-r from-indigo-600/20 to-purple-600/20 rounded-xl p-6 ring-1 ring-indigo-500/30">
-                  <h3 className="font-semibold text-white mb-2">Features</h3>
+                <div className="rounded-xl bg-gradient-to-r from-indigo-600/20 to-purple-600/20 p-6 ring-1 ring-indigo-500/30">
+                  <h3 className="mb-2 font-semibold text-white">Data and privacy</h3>
                   <ul className="space-y-2 text-sm text-slate-300">
-                    <li>✓ Multiple AI provider support</li>
-                    <li>✓ Beautiful glassmorphism design</li>
-                    <li>✓ Real-time status indicator</li>
-                    <li>✓ Local storage persistence</li>
-                    <li>✓ Markdown support with syntax highlighting</li>
-                    <li>✓ Task management with priorities</li>
+                    <li>✓ Provider keys remain only in the current page memory and are never saved to browser storage.</li>
+                    <li>✓ Chats, settings choice, and local checklist data are stored locally in your browser when storage is available.</li>
+                    <li>✓ Tasks are reminders only; Openclow does not send notifications.</li>
+                    <li>✓ Markdown support with syntax highlighting helps keep conversations readable.</li>
                   </ul>
                 </div>
 
-                <div className="text-center pt-4">
-                  <p className="text-slate-400 text-sm">
-                    Built with ❤️ using Next.js, React, and Tailwind CSS
-                  </p>
-                </div>
+                <div className="pt-4 text-center"><p className="text-sm text-slate-400">Built with Next.js, React, and Tailwind CSS</p></div>
               </div>
             </div>
           )}
-        </div>
+        </main>
       </div>
     </div>
   )

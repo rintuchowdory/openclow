@@ -1,28 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { providerChat, providerStatus } from '@/lib/providers'
 
-export async function POST(request: NextRequest) {
-  try {
-    const { prompt, apiKey: clientApiKey } = await request.json()
-    const apiKey = clientApiKey || process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: 'No OpenAI API key' }, { status: 401 })
-    }
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], max_tokens: 1024 })
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: { message: res.statusText } }))
-      return NextResponse.json({ error: err.error?.message ?? `Failed (${res.status})` }, { status: res.status })
-    }
-    const data = await res.json()
-    return NextResponse.json({ response: data.choices[0].message.content })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
-
-export async function GET() {
-  return NextResponse.json({ available: !!process.env.OPENAI_API_KEY })
-}
+export const dynamic = 'force-dynamic'
+export function POST(request: NextRequest) { return providerChat(request, 'openai') }
+export function GET() { return providerStatus('openai') }

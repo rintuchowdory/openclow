@@ -1,39 +1,22 @@
-
-name: CI/CD
-
+name: CI
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
-
+    branches: [main]
+permissions:
+  contents: read
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
-    
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
-        
-    - name: Install dependencies
-      run: npm install
-      
-    - name: Build
-      run: npm run build
-      env:
-        # These secrets must be set in GitHub Repository Settings
-        HUGGINGFACE_API_KEY: ${{ secrets.HUGGINGFACE_API_KEY }}
-        NEXT_PUBLIC_HUGGINGFACE_API_KEY: ${{ secrets.NEXT_PUBLIC_HUGGINGFACE_API_KEY }}
-        NEXT_PUBLIC_GEMINI_KEY: ${{ secrets.NEXT_PUBLIC_GEMINI_KEY }}
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      
-    - name: Deploy to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v3
-      if: github.ref == 'refs/heads/main'
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./out
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build

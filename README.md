@@ -1,219 +1,31 @@
-# openclow ULTRA — Free AI Assistant
+# Openclow
 
-A beautiful, modern AI chat application powered by HuggingFace's free inference API, with Gemini and OpenAI fallback support. Built with Next.js, React, TypeScript, and Tailwind CSS.
+A Next.js, React, TypeScript, and Tailwind workspace for AI chat and a local task checklist. This repaired version preserves the original dark UI and supports Hugging Face, Gemini, and OpenAI. Provider limits and pricing depend on your provider account; unlimited free AI is not promised.
 
-## Features
+## Run locally
 
-- **🤗 HuggingFace Integration**: Free-tier AI (Zephyr-7B) with no credit card required
-- **☁️ Fallback Support**: Automatic fallback to Gemini or OpenAI if HuggingFace is unavailable
-- **✨ Beautiful UI**: Glassmorphism design with smooth animations
-- **✅ Task Management**: Built-in task tracking with priority levels
-- **🔄 Real-time Status**: Live AI availability indicator
-- **💾 Local Storage**: Persistent chat history and tasks
-- **🚀 Production-Ready**: Deployed to GitHub Pages with CI/CD automation
+Use Node 22.13.0 and npm 10.9.2. Run `npm ci`, then `npm run dev`, and open http://localhost:3000. Use `npm run typecheck`, `npm test`, and `npm run lint` for checks. `npm run build` produces the server application; `npm start` serves it.
 
-## Getting Started
+## Provider credentials
 
-### Prerequisites
+Select a provider in Settings and enter your own API key. Keys remain in the current page's memory and are cleared on reload, while the selected provider, chats, and tasks are stored locally in your browser. Old saved keys are removed from localStorage during migration. Keys are sent over HTTPS to the app's server and then to the selected provider; avoid using the app on an untrusted host or shared device.
 
-- Node.js 18+ and npm
-- API keys for at least one AI provider (see below)
+For optional owner-configured server credentials, copy `.env.example` to `.env.local` during local development or use protected runtime secrets in your deployment. Use `HUGGINGFACE_API_KEY`, `GEMINI_API_KEY`, or `OPENCLOW_OPENAI_API_KEY`. Openclow intentionally ignores the generic `OPENAI_API_KEY` to avoid consuming unrelated environment credentials. Do not use `NEXT_PUBLIC_` for secrets. Anyone accessing a public app with owner-configured credentials can consume their quota; use session-entered keys unless you add authentication and quotas.
 
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/rintuchowdory/openclow.git
-cd openclow
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Create a `.env.local` file with your API keys:
-```bash
-cp .env.example .env.local
-```
-
-4. Edit `.env.local` and add your API keys (see API Configuration below)
-
-5. Start the development server:
-```bash
-npm run dev
-```
-
-6. Open [http://localhost:3000](http://localhost:3000) in your browser
-
-## API Configuration
-
-### HuggingFace (Recommended — Free)
-
-1. Visit [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-2. Create a new access token (read-only is sufficient)
-3. Add to `.env.local`:
-```
-HUGGINGFACE_API_KEY=hf_your_token_here
-NEXT_PUBLIC_HUGGINGFACE_API_KEY=hf_your_token_here
-```
-
-**Why HuggingFace?** The free tier provides unlimited API calls to the Zephyr-7B model with no credit card required.
-
-### Gemini (Free with Limits)
-
-1. Visit [ai.google.dev](https://ai.google.dev)
-2. Click "Get API Key" and create a new API key
-3. Add to `.env.local`:
-```
-NEXT_PUBLIC_GEMINI_KEY=your_gemini_key_here
-```
-
-**Note**: Gemini is used as a fallback if HuggingFace is unavailable.
-
-### OpenAI (Paid)
-
-1. Visit [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-2. Create a new API key
-3. Add to `.env.local`:
-```
-OPENAI_API_KEY=sk_your_key_here
-```
-
-## Available Scripts
-
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start development server (http://localhost:3000) |
-| `npm run build` | Build for production |
-| `npm run start` | Start production server |
-| `npm run export` | Export as static site (for GitHub Pages) |
-| `npm run lint` | Run ESLint |
+Hugging Face tokens require Inference Providers permission. Provider model defaults can be changed with `HUGGINGFACE_MODEL`, `GEMINI_MODEL`, or `OPENCLOW_OPENAI_MODEL`. Settings explicitly selects a provider; there is no automatic cross-provider fallback.
 
 ## Deployment
 
-### GitHub Pages (Recommended)
+This app needs a Node server: GitHub Pages cannot run Next.js POST API routes. Do not publish `out/` or put private keys into static build secrets. The included `Dockerfile` installs the lockfile, builds standalone Next.js output, and serves its production assets as a non-root user. It listens on `0.0.0.0` and honors `PORT`, default 3000. `/api/health` returns an unauthenticated success response.
 
-The project is automatically deployed to GitHub Pages when you push to the `main` branch.
+The Manus project uses a container deployment and managed checkpoints. GitHub Actions runs CI only; it does not deploy to Pages. The original GitHub repository remains unchanged by this separate managed repair.
 
-**Important**: To enable API functionality on GitHub Pages, you must add your API keys as GitHub Secrets:
+## Local data
 
-1. Go to your repository on GitHub
-2. Navigate to **Settings** → **Secrets and variables** → **Actions**
-3. Click **New repository secret** and add:
-   - `HUGGINGFACE_API_KEY`
-   - `NEXT_PUBLIC_HUGGINGFACE_API_KEY`
-   - `NEXT_PUBLIC_GEMINI_KEY`
-   - `OPENAI_API_KEY`
+Chat and task data are local to this browser and origin, not synchronized to an account. A new published URL does not automatically inherit data from the old URL. Tasks can be added directly without any AI key, with a category, priority, and optional due date. Completing or deleting a task affects only this browser. A task is not a scheduled reminder and does not send notifications.
 
-The GitHub Actions workflow will automatically use these secrets during the build process.
+## Repair details
 
-### Vercel (Alternative)
+The repair restores missing Tailwind PostCSS processing, replaces the static deployment mismatch, fixes storage hydration and malformed data handling, serializes chat requests, includes conversation context, makes provider failures retryable, and improves mobile navigation. Provider API errors are sanitized and empty/blocked responses receive a clear message. Automated provider tests mock upstream calls; they do not validate a real account's credential or quota.
 
-For a production-ready deployment with server-side rendering:
-
-1. Push your repository to GitHub
-2. Visit [vercel.com](https://vercel.com) and import your repository
-3. Add environment variables in the Vercel dashboard
-4. Deploy
-
-## Troubleshooting
-
-### "HuggingFace unavailable" Error
-
-**Cause**: The `HUGGINGFACE_API_KEY` environment variable is not set or invalid.
-
-**Solution**:
-1. Verify your API key at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-2. Ensure it's added to `.env.local` for local development
-3. For GitHub Pages deployment, add it as a GitHub Secret (see Deployment section)
-4. Restart the development server: `npm run dev`
-
-### API Key Not Working on GitHub Pages
-
-**Cause**: Environment variables are not being passed to the build process.
-
-**Solution**:
-1. Go to **Settings** → **Secrets and variables** → **Actions**
-2. Verify all secrets are correctly added
-3. Re-run the workflow or push a new commit to trigger a rebuild
-4. Check the GitHub Actions log for errors
-
-### Build Fails with "API Key is not set"
-
-**Cause**: The build process doesn't have access to the environment variables.
-
-**Solution**:
-1. Ensure secrets are added to GitHub Actions (not repository variables)
-2. Check the workflow file `.github/workflows/ci.yml` includes the environment variables
-3. Verify the secret names match exactly (case-sensitive)
-
-### Slow Response Times
-
-**Cause**: HuggingFace free tier may have rate limiting or queue delays.
-
-**Solution**:
-1. Consider adding a Gemini or OpenAI API key as a fallback
-2. Wait a few moments and try again
-3. Check HuggingFace status at [status.huggingface.co](https://status.huggingface.co)
-
-## Project Structure
-
-```
-openclow/
-├── src/
-│   └── app/
-│       ├── api/
-│       │   ├── huggingface/route.ts    # HuggingFace API endpoint
-│       │   ├── gemini/route.ts         # Gemini API endpoint (client-side)
-│       │   └── openai/route.ts         # OpenAI API endpoint
-│       ├── globals.css                 # Global styles
-│       ├── layout.tsx                  # Root layout
-│       └── page.tsx                    # Main application
-├── .env.example                        # Environment variables template
-├── .env.local                          # Local environment variables (not committed)
-├── next.config.js                      # Next.js configuration
-├── tailwind.config.js                  # Tailwind CSS configuration
-└── package.json                        # Dependencies and scripts
-```
-
-## How It Works
-
-1. **Frontend** (`page.tsx`): React component that handles chat UI, task management, and AI provider selection
-2. **API Routes** (`api/*/route.ts`): Server-side endpoints that securely handle API keys and communicate with AI providers
-3. **Environment Variables**: Sensitive keys are stored in `.env.local` (local) or GitHub Secrets (production)
-4. **Fallback Logic**: Automatically switches to Gemini if HuggingFace is unavailable
-
-## Security
-
-- **API keys are never exposed to the client**: Server-side routes handle all sensitive communication
-- **Environment variables are protected**: Use `.env.local` locally and GitHub Secrets in production
-- **No hardcoded credentials**: All keys are loaded from environment variables
-
-## Contributing
-
-Contributions are welcome! Feel free to:
-- Report bugs
-- Suggest features
-- Submit pull requests
-
-## License
-
-MIT License — Feel free to use this project for personal or commercial purposes.
-
-## Support
-
-For issues or questions:
-1. Check the Troubleshooting section above
-2. Review the GitHub Issues
-3. Open a new issue with details about your problem
-
-## Changelog
-
-### v0.1.0 (Initial Release)
-- HuggingFace integration with free-tier Zephyr-7B model
-- Gemini and OpenAI fallback support
-- Task management system
-- Beautiful glassmorphism UI
-- GitHub Pages deployment with CI/CD
-- Local storage for chat history and tasks
+Original source: https://github.com/rintuchowdory/openclow, commit f096a87. Provider documentation references are in `REPAIR-NOTES.md`.
