@@ -30,7 +30,8 @@ const EMPTY_SETTINGS: Settings = {
   huggingfaceKey: '',
   groqKey: '',
   openaiKey: '',
-  aiMode: 'huggingface',
+  // Default to the provider configured server-side so a fresh visit works immediately.
+  aiMode: 'groq',
 }
 
 const welcomeMessage = (): Message => ({

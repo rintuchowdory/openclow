@@ -85,8 +85,9 @@ export async function providerChat(request: NextRequest, provider: Provider) {
     if (!response.ok) {
       // Do not relay raw upstream diagnostics: some providers include credentials in them.
       const status = response.status
+      // A dead or revoked token is the most common cause here, so say that before blaming scopes.
       const error = status === 401 || status === 403
-        ? `${names[provider]} rejected the key or its permissions. Check Settings${provider === 'huggingface' ? ' and enable Inference Providers permission for your token' : ''}.`
+        ? `${names[provider]} rejected the key or its permissions. Check Settings: the token may be invalid or expired${provider === 'huggingface' ? ', or it may be missing the Inference Providers permission' : ''}.`
         : status === 429 ? `${names[provider]} rate limit or quota reached. Wait and retry, or check your provider account.`
         : status === 404 ? `${names[provider]} model is unavailable. The site owner can update the configured model.`
         : `${names[provider]} is temporarily unavailable. Please retry.`
