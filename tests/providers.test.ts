@@ -28,13 +28,27 @@ test('unrelated sandbox OpenAI credentials are ignored', async () => {
   }
 })
 
+test('groq availability follows the GROQ_API_KEY server variable', async () => {
+  const saved = process.env.GROQ_API_KEY
+  try {
+    process.env.GROQ_API_KEY = 'server-side-key'
+    assert.deepEqual(await providerStatus('groq').json(), { available: true })
+    delete process.env.GROQ_API_KEY
+    assert.deepEqual(await providerStatus('groq').json(), { available: false })
+    assert.equal((await providerChat(request({ messages }), 'groq')).status, 401)
+  } finally {
+    if (saved !== undefined) process.env.GROQ_API_KEY = saved
+    else delete process.env.GROQ_API_KEY
+  }
+})
+
 test('malformed JSON and wrong key types receive 400', async () => {
   const malformed = new NextRequest('http://localhost/api/openai', { method: 'POST', body: '{' })
   assert.equal((await providerChat(malformed, 'openai')).status, 400)
   assert.equal((await providerChat(request({ messages, apiKey: 123 }), 'openai')).status, 400)
 })
 
-for (const provider of ['openai', 'huggingface', 'gemini'] as Provider[]) {
+for (const provider of ['openai', 'huggingface', 'groq'] as Provider[]) {
   test(`${provider} forwards context and parses successful answers`, async () => {
     const original = globalThis.fetch
     let called = false
@@ -42,12 +56,9 @@ for (const provider of ['openai', 'huggingface', 'gemini'] as Provider[]) {
       called = true
       const body = JSON.parse(String(options?.body))
       assert.ok(!String(options?.body).includes('test-credential'))
-      if (provider === 'gemini') {
-        assert.ok(!String(url).includes('test-credential'))
-        assert.equal((options?.headers as Record<string, string>)['x-goog-api-key'], 'test-credential')
-        assert.equal(body.contents[0].parts[0].text, 'Hello')
-        return Response.json({ candidates: [{ content: { parts: [{ text: 'Answer' }, { text: ' complete' }] } }] })
-      }
+      assert.ok(!String(url).includes('test-credential'))
+      assert.equal((options?.headers as Record<string, string>).Authorization, 'Bearer test-credential')
+      assert.equal(body.messages[0].role, 'system')
       assert.equal(body.messages[1].content, 'Hello')
       return Response.json({ choices: [{ message: { content: 'Answer complete' } }] })
     }
@@ -61,6 +72,27 @@ for (const provider of ['openai', 'huggingface', 'gemini'] as Provider[]) {
   })
 }
 
+test('groq targets the Groq endpoint and a reasoning-safe default model', async () => {
+  const original = globalThis.fetch
+  const savedModel = process.env.GROQ_MODEL
+  delete process.env.GROQ_MODEL
+  let seenUrl = ''
+  let seenModel = ''
+  globalThis.fetch = async (url, options) => {
+    seenUrl = String(url)
+    seenModel = JSON.parse(String(options?.body)).model
+    return Response.json({ choices: [{ message: { content: 'ok' } }] })
+  }
+  try {
+    await providerChat(request({ messages, apiKey: 'test-credential' }), 'groq')
+    assert.equal(seenUrl, 'https://api.groq.com/openai/v1/chat/completions')
+    assert.equal(seenModel, 'qwen/qwen3.8-27b')
+  } finally {
+    globalThis.fetch = original
+    if (savedModel !== undefined) process.env.GROQ_MODEL = savedModel
+  }
+})
+
 test('quota errors are preserved without relaying upstream secrets', async () => {
   const original = globalThis.fetch
   globalThis.fetch = async () => Response.json({ error: { message: 'test-credential leaked upstream' } }, { status: 429 })
@@ -73,9 +105,9 @@ test('quota errors are preserved without relaying upstream secrets', async () =>
 
 test('empty or blocked completion is not reported as success', async () => {
   const original = globalThis.fetch
-  globalThis.fetch = async () => Response.json({ candidates: [] })
+  globalThis.fetch = async () => Response.json({ choices: [] })
   try {
-    assert.equal((await providerChat(request({ messages, apiKey: 'test-credential' }), 'gemini')).status, 502)
+    assert.equal((await providerChat(request({ messages, apiKey: 'test-credential' }), 'groq')).status, 502)
   } finally { globalThis.fetch = original }
 })
 

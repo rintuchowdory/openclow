@@ -1,4 +1,4 @@
-export const AI_MODES = ['huggingface', 'gemini', 'openai'] as const
+export const AI_MODES = ['huggingface', 'groq', 'openai'] as const
 
 export type AiMode = (typeof AI_MODES)[number]
 export type MessageKind = 'chat' | 'welcome' | 'error'

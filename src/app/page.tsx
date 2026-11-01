@@ -21,14 +21,14 @@ type Task = StoredTask
 
 interface Settings {
   huggingfaceKey: string
-  geminiKey: string
+  groqKey: string
   openaiKey: string
   aiMode: AiMode
 }
 
 const EMPTY_SETTINGS: Settings = {
   huggingfaceKey: '',
-  geminiKey: '',
+  groqKey: '',
   openaiKey: '',
   aiMode: 'huggingface',
 }
@@ -43,7 +43,7 @@ const welcomeMessage = (): Message => ({
 
 const activeKeyFor = (settings: Settings) => {
   if (settings.aiMode === 'huggingface') return settings.huggingfaceKey.trim()
-  if (settings.aiMode === 'gemini') return settings.geminiKey.trim()
+  if (settings.aiMode === 'groq') return settings.groqKey.trim()
   return settings.openaiKey.trim()
 }
 
@@ -87,7 +87,7 @@ export default function OpenclowApp() {
   const activeKey = useMemo(() => activeKeyFor(settings), [settings])
   const hasClientKey = activeKey.length > 0
   const isConfigured = hasClientKey || providerAvailable === true
-  const aiLabel = settings.aiMode === 'huggingface' ? 'HuggingFace' : settings.aiMode === 'gemini' ? 'Gemini' : 'OpenAI'
+  const aiLabel = settings.aiMode === 'huggingface' ? 'HuggingFace' : settings.aiMode === 'groq' ? 'Groq' : 'OpenAI'
   const actualMessageCount = messages.filter(isActualConversationMessage).length
   const openTaskCount = tasks.filter(task => !task.completed).length
   const filteredTasks = tasks.filter(task => taskFilter === 'all' || (taskFilter === 'done' ? task.completed : !task.completed))
@@ -419,7 +419,7 @@ export default function OpenclowApp() {
                           : 'bg-white/5 text-slate-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-slate-200'
                       }`}
                     >
-                      {mode === 'huggingface' ? '🤗 HuggingFace' : mode === 'gemini' ? '✨ Gemini' : '🚀 OpenAI'}
+                      {mode === 'huggingface' ? '🤗 HuggingFace' : mode === 'groq' ? '⚡ Groq' : '🚀 OpenAI'}
                     </button>
                   ))}
                 </div>
@@ -436,13 +436,13 @@ export default function OpenclowApp() {
                   </div>
                 )}
 
-                {settingsDraft.aiMode === 'gemini' && (
+                {settingsDraft.aiMode === 'groq' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2">
                     <div className="mb-2 flex items-center justify-between gap-3">
-                      <label htmlFor="gemini-key" className="text-sm font-semibold text-slate-300">Gemini API Key</label>
+                      <label htmlFor="groq-key" className="text-sm font-semibold text-slate-300">Groq API Key</label>
                       <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-xs text-indigo-400 transition-colors hover:text-indigo-300">Get key ↗</a>
                     </div>
-                    <input id="gemini-key" type="password" value={settingsDraft.geminiKey} onChange={event => setSettingsDraft(draft => ({ ...draft, geminiKey: event.target.value }))} placeholder="AIza..." autoComplete="off" className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3.5 text-white placeholder-slate-600 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    <input id="groq-key" type="password" value={settingsDraft.groqKey} onChange={event => setSettingsDraft(draft => ({ ...draft, groqKey: event.target.value }))} placeholder="gsk_..." autoComplete="off" className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3.5 text-white placeholder-slate-600 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                   </div>
                 )}
 
@@ -676,7 +676,7 @@ export default function OpenclowApp() {
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10"><h3 className="mb-2 font-semibold text-indigo-400">🤗 HuggingFace</h3><p className="text-sm text-slate-400">Use your own HuggingFace provider key.</p></div>
-                  <div className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10"><h3 className="mb-2 font-semibold text-indigo-400">✨ Gemini</h3><p className="text-sm text-slate-400">Use your own Google Gemini API key.</p></div>
+                  <div className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10"><h3 className="mb-2 font-semibold text-indigo-400">⚡ Groq</h3><p className="text-sm text-slate-400">Use your own Groq API key.</p></div>
                   <div className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10"><h3 className="mb-2 font-semibold text-indigo-400">🚀 OpenAI</h3><p className="text-sm text-slate-400">Use your own OpenAI API key.</p></div>
                   <div className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10"><h3 className="mb-2 font-semibold text-indigo-400">✓ Tasks</h3><p className="text-sm text-slate-400">A local checklist with priorities and optional due dates.</p></div>
                 </div>

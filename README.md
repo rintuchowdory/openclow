@@ -1,6 +1,6 @@
 # Openclow
 
-A Next.js, React, TypeScript, and Tailwind workspace for AI chat and a local task checklist. This repaired version preserves the original dark UI and supports Hugging Face, Gemini, and OpenAI. Provider limits and pricing depend on your provider account; unlimited free AI is not promised.
+A Next.js, React, TypeScript, and Tailwind workspace for AI chat and a local task checklist. This repaired version preserves the original dark UI and supports Hugging Face, Groq, and OpenAI. Provider limits and pricing depend on your provider account; unlimited free AI is not promised.
 
 ## Run locally
 
@@ -10,9 +10,9 @@ Use Node 22.13.0 and npm 10.9.2. Run `npm ci`, then `npm run dev`, and open http
 
 Select a provider in Settings and enter your own API key. Keys remain in the current page's memory and are cleared on reload, while the selected provider, chats, and tasks are stored locally in your browser. Old saved keys are removed from localStorage during migration. Keys are sent over HTTPS to the app's server and then to the selected provider; avoid using the app on an untrusted host or shared device.
 
-For optional owner-configured server credentials, copy `.env.example` to `.env.local` during local development or use protected runtime secrets in your deployment. Use `HUGGINGFACE_API_KEY`, `GEMINI_API_KEY`, or `OPENCLOW_OPENAI_API_KEY`. Openclow intentionally ignores the generic `OPENAI_API_KEY` to avoid consuming unrelated environment credentials. Do not use `NEXT_PUBLIC_` for secrets. Anyone accessing a public app with owner-configured credentials can consume their quota; use session-entered keys unless you add authentication and quotas.
+For optional owner-configured server credentials, copy `.env.example` to `.env.local` during local development or use protected runtime secrets in your deployment. Use `HUGGINGFACE_API_KEY`, `GROQ_API_KEY`, or `OPENCLOW_OPENAI_API_KEY`. Openclow intentionally ignores the generic `OPENAI_API_KEY` to avoid consuming unrelated environment credentials. Do not use `NEXT_PUBLIC_` for secrets. Anyone accessing a public app with owner-configured credentials can consume their quota; use session-entered keys unless you add authentication and quotas.
 
-Hugging Face tokens require Inference Providers permission. Provider model defaults can be changed with `HUGGINGFACE_MODEL`, `GEMINI_MODEL`, or `OPENCLOW_OPENAI_MODEL`. Settings explicitly selects a provider; there is no automatic cross-provider fallback.
+Hugging Face tokens require Inference Providers permission. Provider model defaults can be changed with `HUGGINGFACE_MODEL`, `GROQ_MODEL`, or `OPENCLOW_OPENAI_MODEL`. Settings explicitly selects a provider; there is no automatic cross-provider fallback.
 
 ## Deployment
 

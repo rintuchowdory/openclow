@@ -53,18 +53,18 @@ test('task parser rejects malformed values and invalid enum members', () => {
 
 test('settings parser strips legacy credentials and serializer persists only aiMode', () => {
   const migrated = parseStoredSettings(JSON.stringify({
-    aiMode: 'gemini',
+    aiMode: 'groq',
     huggingfaceKey: 'legacy-hf-secret',
     geminiKey: 'legacy-gemini-secret',
     openaiKey: 'legacy-openai-secret',
   }))
 
-  assert.deepEqual(migrated, { aiMode: 'gemini' })
+  assert.deepEqual(migrated, { aiMode: 'groq' })
   assert.deepEqual(JSON.parse(serializeSettings('openai')), { aiMode: 'openai' })
 })
 
 test('settings parser rejects invalid JSON, non-objects, and unrecognized providers', () => {
   assert.equal(parseStoredSettings('{bad json'), null)
-  assert.equal(parseStoredSettings(JSON.stringify(['gemini'])), null)
+  assert.equal(parseStoredSettings(JSON.stringify(['groq'])), null)
   assert.equal(parseStoredSettings(JSON.stringify({ aiMode: 'unknown' })), null)
 })

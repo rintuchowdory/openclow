@@ -1,14 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-export type Provider = 'huggingface' | 'gemini' | 'openai'
+export type Provider = 'huggingface' | 'groq' | 'openai'
 export type ChatMessage = { role: 'user' | 'assistant'; content: string }
 const systemPrompt = 'You are Openclow, a helpful and professional AI assistant. Format answers with Markdown. Tasks in this app are a local checklist, not scheduled notifications.'
-const names: Record<Provider, string> = { huggingface: 'Hugging Face', gemini: 'Gemini', openai: 'OpenAI' }
+const names: Record<Provider, string> = { huggingface: 'Hugging Face', groq: 'Groq', openai: 'OpenAI' }
 const keyNames: Record<Provider, string> = {
   huggingface: 'HUGGINGFACE_API_KEY',
-  gemini: 'GEMINI_API_KEY',
+  groq: 'GROQ_API_KEY',
   // Never accidentally consume the Manus sandbox's unrelated OpenAI key.
   openai: 'OPENCLOW_OPENAI_API_KEY',
+}
+// Every provider below speaks the OpenAI-compatible chat-completions shape.
+const endpoints: Record<Provider, string> = {
+  huggingface: 'https://router.huggingface.co/v1/chat/completions',
+  groq: 'https://api.groq.com/openai/v1/chat/completions',
+  openai: 'https://api.openai.com/v1/chat/completions',
+}
+const modelNames: Record<Provider, string> = {
+  huggingface: process.env.HUGGINGFACE_MODEL || 'meta-llama/Llama-3.1-8B-Instruct',
+  // qwen3.8-27b returns its answer in `content` without spending the budget on reasoning tokens.
+  groq: process.env.GROQ_MODEL || 'qwen/qwen3.8-27b',
+  openai: process.env.OPENCLOW_OPENAI_MODEL || 'gpt-4o-mini',
 }
 const noCache = { 'Cache-Control': 'private, no-store' }
 
@@ -40,7 +52,6 @@ export function parseMessages(body: Record<string, unknown>): ChatMessage[] {
 
 type Completion = {
   choices?: { message?: { content?: string } }[]
-  candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[]
 }
 
 export async function providerChat(request: NextRequest, provider: Provider) {
@@ -62,30 +73,15 @@ export async function providerChat(request: NextRequest, provider: Provider) {
   if (!apiKey) return json({ error: `Add your ${names[provider]} API key in Settings to start chatting.` }, 401)
   if (apiKey.length > 4096 || /[\r\n]/.test(apiKey)) return json({ error: 'Invalid API key format.' }, 400)
 
-  let url: string
-  let payload: object
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (provider === 'gemini') {
-    const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite'
-    url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`
-    headers['x-goog-api-key'] = apiKey
-    payload = {
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: messages.map(message => ({ role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: message.content }] })),
-      generationConfig: { maxOutputTokens: 2048 },
-    }
-  } else {
-    url = provider === 'huggingface' ? 'https://router.huggingface.co/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'
-    headers.Authorization = `Bearer ${apiKey}`
-    payload = {
-      model: provider === 'huggingface' ? process.env.HUGGINGFACE_MODEL || 'meta-llama/Llama-3.1-8B-Instruct' : process.env.OPENCLOW_OPENAI_MODEL || 'gpt-4o-mini',
-      messages: [{ role: 'system', content: systemPrompt }, ...messages],
-      max_tokens: 2048,
-    }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }
+  const payload = {
+    model: modelNames[provider],
+    messages: [{ role: 'system', content: systemPrompt }, ...messages],
+    max_tokens: 2048,
   }
 
   try {
-    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(60000), cache: 'no-store' })
+    const response = await fetch(endpoints[provider], { method: 'POST', headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(60000), cache: 'no-store' })
     if (!response.ok) {
       // Do not relay raw upstream diagnostics: some providers include credentials in them.
       const status = response.status
@@ -97,9 +93,7 @@ export async function providerChat(request: NextRequest, provider: Provider) {
       return json({ error }, [401, 403, 404, 429].includes(status) ? status : 502)
     }
     const data = await response.json() as Completion
-    const text = provider === 'gemini'
-      ? data.candidates?.[0]?.content?.parts?.filter(part => !part.thought).map(part => part.text || '').join('')
-      : data.choices?.[0]?.message?.content
+    const text = data.choices?.[0]?.message?.content
     if (typeof text !== 'string' || !text.trim()) return json({ error: `${names[provider]} returned no answer. The message may have been blocked; try rephrasing it.` }, 502)
     return json({ response: text })
   } catch (error) {
