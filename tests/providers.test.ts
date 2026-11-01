@@ -111,6 +111,20 @@ test('empty or blocked completion is not reported as success', async () => {
   } finally { globalThis.fetch = original }
 })
 
+test('out-of-credits is reported as 402 with an actionable message', async () => {
+  const original = globalThis.fetch
+  globalThis.fetch = async () => Response.json({ error: 'You have no remaining credits.' }, { status: 402 })
+  try {
+    const hf = await providerChat(request({ messages, apiKey: 'test-credential' }), 'huggingface')
+    assert.equal(hf.status, 402)
+    const body = await hf.json() as { error: string }
+    assert.match(body.error, /Inference Providers credits/)
+    assert.match(body.error, /PRO/)
+    const groq = await providerChat(request({ messages, apiKey: 'test-credential' }), 'groq')
+    assert.equal(groq.status, 402)
+  } finally { globalThis.fetch = original }
+})
+
 test('provider timeout is retryable and receives 504', async () => {
   const original = globalThis.fetch
   globalThis.fetch = async () => { throw new DOMException('Timeout', 'TimeoutError') }

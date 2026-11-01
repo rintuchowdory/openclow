@@ -88,10 +88,13 @@ export async function providerChat(request: NextRequest, provider: Provider) {
       // A dead or revoked token is the most common cause here, so say that before blaming scopes.
       const error = status === 401 || status === 403
         ? `${names[provider]} rejected the key or its permissions. Check Settings: the token may be invalid or expired${provider === 'huggingface' ? ', or it may be missing the Inference Providers permission' : ''}.`
+        : status === 402 ? (provider === 'huggingface'
+          ? 'Hugging Face has no remaining Inference Providers credits. Buy pre-paid credits or subscribe to PRO, or switch provider in Settings.'
+          : `${names[provider]} has no remaining credits for this account. Check your provider billing, or switch provider in Settings.`)
         : status === 429 ? `${names[provider]} rate limit or quota reached. Wait and retry, or check your provider account.`
         : status === 404 ? `${names[provider]} model is unavailable. The site owner can update the configured model.`
         : `${names[provider]} is temporarily unavailable. Please retry.`
-      return json({ error }, [401, 403, 404, 429].includes(status) ? status : 502)
+      return json({ error }, [401, 402, 403, 404, 429].includes(status) ? status : 502)
     }
     const data = await response.json() as Completion
     const text = data.choices?.[0]?.message?.content
